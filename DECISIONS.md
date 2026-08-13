@@ -26,3 +26,4 @@ One block per resolved decision. A line beginning NEEDS_HUMAN flags a gate await
 - Picked: Allow source, tests, examples, packs, skill/docs, and Python packaging metadata only.
 - Why: Those prefixes cover the requested vertical slices while excluding loop machinery, infrastructure, credentials, payments, and unrelated systems.
 - Reversible? yes
+- CROSS_REVIEW: iter 1 — author=codex reviewer=claude verdict=accept confidence=high — risk: A live sanctions/DFAT endpoint returning paginated or fuzzy matches, or names with punctuation/diacritics — client-side exact casefold match could report a real hit as "not_found". — note: clean; T1 contract + ABR/BSB/sanctions clients are real, in-scope, and fully exercised (fresh/stale cache, timeout, malformed, wrong-type, not_found, exact-match) — no placeholders, additive __init__ export only.

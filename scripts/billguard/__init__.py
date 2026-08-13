@@ -14,6 +14,8 @@ from .model import (           # noqa: F401
     Severity, Status, from_cents, to_cents,
 )
 from .verdict import HOLD, QUERY, SAFE, Verdict, decide, render_text  # noqa: F401
+from .lookups import (AbrClient, BsbClient, LookupClient, LookupResult,
+                      SanctionsClient)  # noqa: F401
 
 __version__ = "0.1.0"
 
@@ -22,6 +24,7 @@ __all__ = [
     "PaymentInstruction", "Severity", "Status", "Verdict",
     "decide", "render_text", "from_cents", "to_cents",
     "HOLD", "QUERY", "SAFE", "assess",
+    "AbrClient", "BsbClient", "LookupClient", "LookupResult", "SanctionsClient",
 ]
 
 
