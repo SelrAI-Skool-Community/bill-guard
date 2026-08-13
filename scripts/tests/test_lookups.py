@@ -131,6 +131,26 @@ def structurally_invalid_cache_is_ignored():
 
 
 @test
+def cache_with_wrong_source_is_ignored():
+    ledger = Ledger(":memory:")
+    ledger.cache_registry("bsb:123456", NOW.isoformat(), {
+        "status": "found",
+        "source": "Unrelated directory",
+        "observed_at": NOW.isoformat(),
+        "data": {"bsb": "123456", "institution": "Wrong Bank"},
+    })
+    fake = FakeTransport({"bsb": "123456", "institution": "Right Bank"})
+    result = BsbClient(
+        ledger, endpoint="https://directory.example/bsb", transport=fake,
+        now=lambda: NOW).lookup("123456")
+    eq(result.status, "found")
+    eq(result.data["institution"], "Right Bank")
+    eq(result.source, "Australian Payments Network BSB directory")
+    eq(result.cache, "miss")
+    eq(len(fake.calls), 1)
+
+
+@test
 def future_dated_cache_is_not_used_as_evidence():
     ledger = Ledger(":memory:")
     future = NOW + timedelta(days=1)

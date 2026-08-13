@@ -72,12 +72,14 @@ class LookupClient(ABC):
         if cached:
             try:
                 age = at - _parse_datetime(cached[0]["asked_at"])
-                cached_result = _result_from_cache(cached[0], "stale")
+                cached_result = _result_from_cache(
+                    cached[0], "stale", expected_source=self.source)
                 if age < timedelta(0):
                     raise ValueError("cache observation is in the future")
                 valid_cached = cached_result
                 if age <= self.max_age:
-                    return _result_from_cache(cached[0], "fresh")
+                    return _result_from_cache(
+                        cached[0], "fresh", expected_source=self.source)
             except (AttributeError, KeyError, TypeError, ValueError):
                 # A damaged local cache must never turn a lookup into a crash
                 # or be presented as registry evidence.
@@ -221,7 +223,8 @@ def _parse_datetime(value: str) -> datetime:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-def _result_from_cache(item: dict, cache: str) -> LookupResult:
+def _result_from_cache(item: dict, cache: str, *,
+                       expected_source: str) -> LookupResult:
     data = item["response"]
     if not isinstance(data, dict):
         raise ValueError("cached response must be an object")
@@ -229,6 +232,8 @@ def _result_from_cache(item: dict, cache: str) -> LookupResult:
         raise ValueError("cached response has an invalid status")
     if not isinstance(data.get("source"), str) or not data["source"]:
         raise ValueError("cached response has no source")
+    if data["source"] != expected_source:
+        raise ValueError("cached response source does not match lookup")
     _parse_datetime(data["observed_at"])
     if not isinstance(data.get("data", {}), dict):
         raise ValueError("cached response data must be an object")
