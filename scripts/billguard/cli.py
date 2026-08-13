@@ -247,6 +247,9 @@ def _remember(ledger: Ledger, doc: Document, verdict) -> None:
     """Record what we saw. Seeing is not paying: D01 depends on the difference."""
     when = doc.received_at or doc.issue_date or ""
     key = doc.supplier_key()
+    metadata = doc.artifacts.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
     if key:
         ledger.upsert_supplier(key, doc.supplier_name, doc.supplier_abn, when)
         if doc.supplier_domain:
@@ -263,7 +266,14 @@ def _remember(ledger: Ledger, doc: Document, verdict) -> None:
         doc.doc_id, doc.content_hash(), key, doc.invoice_number,
         doc.issue_date, doc.total_cents, doc.currency, doc.channel.value,
         doc.received_at, verdict.outcome,
-        payload={"payment_fingerprint": doc.payment.fingerprint()})
+        payload={
+            "payment_fingerprint": doc.payment.fingerprint(),
+            "producer_tool": (
+                doc.artifacts.get("producer_tool")
+                or metadata.get("producer_tool")
+                or metadata.get("producer")
+            ),
+        })
     ledger.add_evidence(when, "assessed", doc.doc_id,
                         detail={"outcome": verdict.outcome})
 

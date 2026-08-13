@@ -19,7 +19,7 @@ with everything green. One task should be one commit.
 - [x] T2b: Add check B03, supplier registration status AS AT THE INVOICE DATE,
       not today — done when: a supplier cancelled after the invoice date passes,
       one cancelled before it fails, and a missing date returns unknown.
-- [ ] T2c: Add family E, document integrity: producer-tool drift against this
+- [x] T2c: Add family E, document integrity: producer-tool drift against this
       supplier's own history — done when: drift alone is INFO, and drift plus a
       changed payment destination is a HOLD.
 - [ ] T2d: Add check D06, payment destination cross-checked against the decoded

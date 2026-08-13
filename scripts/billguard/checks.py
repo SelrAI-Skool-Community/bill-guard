@@ -12,6 +12,7 @@ never becomes a pass.
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import re
 
 from . import au
@@ -425,8 +426,78 @@ def abn_registry_match(doc: Document, ledger, ctx) -> CheckResult:
 
 
 # ===========================================================================
-# FAMILY E -- external watchlists
+# FAMILY E -- document integrity and external watchlists
 # ===========================================================================
+
+def _producer_tool(doc: Document) -> str | None:
+    """Return normalized producer metadata across supported artifact shapes."""
+    direct = doc.artifacts.get("producer_tool")
+    metadata = doc.artifacts.get("metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    value = direct or metadata.get("producer_tool") or metadata.get("producer")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return " ".join(value.split()).casefold()
+
+
+@check("E02", "Document producer matches this supplier's own history",
+       "document_integrity")
+def producer_tool_drift(doc: Document, ledger, ctx) -> CheckResult:
+    """Producer drift is weak alone, but corroborates payment redirection."""
+    current = _producer_tool(doc)
+    key = doc.supplier_key()
+    if current is None:
+        return unknown("E02", producer_tool_drift.title,
+                       "no document producer tool was extracted")
+    if key is None:
+        return unknown("E02", producer_tool_drift.title,
+                       "no supplier key: cannot look up producer history")
+    if ledger is None:
+        return unknown("E02", producer_tool_drift.title,
+                       "no ledger available for producer history")
+
+    previous = set()
+    for row in ledger.supplier_documents(key):
+        try:
+            payload = json.loads(row.get("payload_json") or "{}")
+        except (TypeError, ValueError):
+            continue
+        value = payload.get("producer_tool")
+        if isinstance(value, str) and value.strip():
+            previous.add(" ".join(value.split()).casefold())
+
+    if not previous:
+        return not_applicable(
+            "E02", producer_tool_drift.title,
+            "first document with producer metadata for this supplier: no "
+            "producer baseline exists yet")
+    if current in previous:
+        return ok("E02", producer_tool_drift.title,
+                  f"producer tool {current!r} appears in supplier history")
+
+    fp = doc.payment.fingerprint()
+    paid_fingerprints = {
+        row["fingerprint"] for row in ledger.paid_destinations(key)
+    }
+    payment_changed = bool(
+        fp and paid_fingerprints and fp not in paid_fingerprints)
+    history = ", ".join(sorted(previous))
+    evidence = (f"producer tool changed to {current!r}; this supplier's "
+                f"recorded producer history is {history}")
+    if payment_changed:
+        return fail(
+            "E02", producer_tool_drift.title, Severity.HOLD, FPRisk.LOW,
+            evidence + "; the payment destination also differs from every "
+            "destination previously paid for this supplier",
+            current_producer=current, previous_producers=sorted(previous),
+            payment_fingerprint=fp)
+    return fail(
+        "E02", producer_tool_drift.title, Severity.INFO, FPRisk.HIGH,
+        evidence + "; producer drift alone is informational because suppliers "
+        "legitimately change invoicing software",
+        current_producer=current, previous_producers=sorted(previous))
+
 
 @check("E01", "Supplier name has no exact supplied sanctions-list match",
        "sanctions")

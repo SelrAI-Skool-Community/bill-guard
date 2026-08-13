@@ -5,9 +5,12 @@ outranks every other technique in this system combined. It gets the most
 tests.
 """
 
+import json
+
 from harness import test, eq, true, false, main
 from billguard import assess
 from billguard.checks import run_all
+from billguard.cli import _remember
 from billguard.ledger import Ledger
 from billguard.lookups import LookupResult
 from billguard.model import (
@@ -183,6 +186,74 @@ def a_broken_code_checksum_is_a_hold():
     r = _by_id(run_all(doc, None), "D05b")
     eq(r.status, Status.FAIL)
     eq(r.severity, Severity.HOLD)
+
+
+# ===========================================================================
+# E02 -- document integrity
+# ===========================================================================
+
+def _record_producer_history(led, producer="Xero PDF Engine"):
+    led.record_document(
+        "old-producer-doc", "old-producer-hash", "abn:98273029681",
+        "INV-18000", "2026-01-05", 90000, "AUD", "mailbox",
+        "2026-01-05", "SAFE TO PAY", payload={"producer_tool": producer})
+
+
+@test
+def producer_tool_drift_alone_is_information_only():
+    doc = _doc(artifacts={"producer_tool": "LibreOffice 25.2"})
+    led = _ledger_with_history(doc.payment.fingerprint())
+    _record_producer_history(led)
+    r = _by_id(run_all(doc, led), "E02")
+    eq(r.status, Status.FAIL)
+    eq(r.severity, Severity.INFO)
+    eq(r.fp_risk, FPRisk.HIGH)
+    eq(assess(doc, led).outcome, SAFE,
+       "producer drift alone must not gate payment")
+    led.close()
+
+
+@test
+def producer_tool_drift_plus_changed_destination_is_a_hold():
+    doc = _doc(artifacts={"metadata": {"producer": "LibreOffice 25.2"}})
+    doc.payment = PaymentInstruction(
+        bsb="083-004", account_number="99887766", confidence=0.99)
+    led = _ledger_with_history("au:062000:12345678")
+    _record_producer_history(led)
+    r = _by_id(run_all(doc, led), "E02")
+    eq(r.status, Status.FAIL)
+    eq(r.severity, Severity.HOLD)
+    true("payment destination also differs" in r.evidence)
+    led.close()
+
+
+@test
+def known_producer_tool_passes_integrity_check():
+    doc = _doc(artifacts={"producer_tool": "  XERO   pdf Engine "})
+    led = _ledger_with_history(doc.payment.fingerprint())
+    _record_producer_history(led)
+    r = _by_id(run_all(doc, led), "E02")
+    eq(r.status, Status.PASS)
+    led.close()
+
+
+@test
+def assessed_document_producer_is_saved_for_later_comparison():
+    doc = _doc(artifacts={"metadata": {"producer": "Xero PDF Engine"}})
+    led = _ledger_with_history(doc.payment.fingerprint())
+    _remember(led, doc, assess(doc, led))
+    rows = led.supplier_documents(doc.supplier_key())
+    payload = json.loads(rows[0]["payload_json"])
+    eq(payload["producer_tool"], "Xero PDF Engine")
+    led.close()
+
+
+@test
+def malformed_metadata_degrades_to_unknown_without_raising():
+    doc = _doc(artifacts={"metadata": "not an object"})
+    r = _by_id(run_all(doc, None), "E02")
+    eq(r.status, Status.UNKNOWN)
+    true("no document producer" in r.evidence)
 
 
 # ===========================================================================
