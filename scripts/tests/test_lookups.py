@@ -95,6 +95,23 @@ def malformed_cache_is_ignored_and_transport_failure_is_unknown():
 
 
 @test
+def invalid_json_cache_is_ignored_and_fresh_response_is_used():
+    ledger = Ledger(":memory:")
+    ledger._conn.execute(
+        "INSERT INTO registry_cache(key, asked_at, response_json) VALUES(?,?,?)",
+        ("bsb:123456", NOW.isoformat(), "{truncated"))
+    ledger._conn.commit()
+    fake = FakeTransport({"bsb": "123456", "institution": "Bank"})
+    result = BsbClient(
+        ledger, endpoint="https://directory.example/bsb", transport=fake,
+        now=lambda: NOW).lookup("123456")
+    eq(result.status, "found")
+    eq(result.data["institution"], "Bank")
+    eq(result.cache, "miss")
+    eq(len(fake.calls), 1)
+
+
+@test
 def bsb_not_found_and_sanctions_exact_match_are_deterministic():
     ledger = Ledger(":memory:")
     bsb = BsbClient(ledger, endpoint="https://directory.example/bsb",

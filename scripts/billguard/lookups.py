@@ -62,7 +62,12 @@ class LookupClient(ABC):
             return LookupResult("unknown", self.source, at.isoformat(),
                                 error=f"{type(exc).__name__}: {exc}")
         cache_key = f"{self.namespace}:{normalized}"
-        cached = self.ledger.registry_answers(cache_key)
+        try:
+            cached = self.ledger.registry_answers(cache_key)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            # Cache contents are local evidence, not trusted registry input.
+            # A truncated or manually damaged row must not block a fresh lookup.
+            cached = []
         valid_cached = None
         if cached:
             try:
