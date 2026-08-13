@@ -12,7 +12,7 @@ with everything green. One task should be one commit.
       and a dated row in `registry_cache` carrying `observed_at`.
 
 ## Critical path
-- [ ] T2a: Wire the ABR client into check B01 so a present ABN is confirmed
+- [x] T2a: Wire the ABR client into check B01 so a present ABN is confirmed
       against the register — done when: tests cover found, not-found, cancelled,
       and the offline `unknown` path, and the evidence names the register and
       the date it was asked.
