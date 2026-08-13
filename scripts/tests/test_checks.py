@@ -190,6 +190,20 @@ def a_broken_code_checksum_is_a_hold():
 # ===========================================================================
 
 @test
+def a_valid_abn_passes_with_no_register_lookup_configured():
+    """Out of the box, with no API key, a green verdict must still be
+    reachable. Otherwise the tool never works until someone configures it."""
+    doc = _doc()
+    r = _by_id(run_all(doc, None), "B01")
+    eq(r.status, Status.PASS, "checksum alone is a real result")
+
+    led = _ledger_with_history(doc.payment.fingerprint())
+    eq(assess(doc, led).outcome, SAFE, "a clean invoice must be payable "
+                                       "with zero configuration")
+    led.close()
+
+
+@test
 def invalid_abn_is_a_hold():
     doc = _doc(supplier_abn="12345678901")
     r = _by_id(run_all(doc, None), "B01")

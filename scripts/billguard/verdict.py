@@ -31,6 +31,8 @@ class Verdict:
     outcome: str
     headline: str
     reasons: list = field(default_factory=list)
+    actions: list = field(default_factory=list)
+    notes: list = field(default_factory=list)
     not_checked: list = field(default_factory=list)
     limits: list = field(default_factory=list)
     results: list = field(default_factory=list)
@@ -40,6 +42,8 @@ class Verdict:
             "outcome": self.outcome,
             "headline": self.headline,
             "reasons": self.reasons,
+            "actions": self.actions,
+            "notes": self.notes,
             "not_checked": self.not_checked,
             "limits": self.limits,
             "checks": [r.to_dict() for r in self.results],
@@ -64,6 +68,9 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
     holds = [r for r in fired if r.severity is Severity.HOLD]
     queries = [r for r in fired if r.severity is Severity.QUERY]
     settled = [r for r in fired if r.severity is Severity.SETTLED]
+    # Paperwork and tax notes. Worth telling the owner, never a reason to
+    # withhold a payment.
+    notes = [_reason(r) for r in fired if r.severity is Severity.INFO]
 
     # A high false-positive-risk finding never gates payment on its own.
     weak_only_queries = [r for r in queries if r.fp_risk is FPRisk.HIGH]
@@ -80,6 +87,7 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
             outcome=SETTLED,
             headline="Nothing is owed on this document. It is a receipt.",
             reasons=[_reason(r) for r in settled],
+            notes=notes,
             not_checked=[],
             limits=limits,
             results=results,
@@ -91,6 +99,27 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
             outcome=HOLD,
             headline=primary.evidence.split(". ")[0].rstrip(".") + ".",
             reasons=[_reason(r) for r in holds + real_queries],
+            actions=[a for a in (_action(r) for r in holds + real_queries) if a],
+            notes=notes,
+            not_checked=not_checked,
+            limits=limits,
+            results=results,
+        )
+
+    # A missing SAFETY check outranks a small finding. This ordering used to
+    # be the other way round, so a trivial "overdue" query would hide the
+    # fact that the bank-detail check never ran at all.
+    if _material_unknowns(unknowns):
+        missing = [r for r in unknowns if r.check_id in MATERIAL_CHECKS]
+        return Verdict(
+            outcome=QUERY,
+            headline=("Not enough of this invoice could be read to say it is "
+                      "safe to pay."),
+            reasons=[
+                "A check that decides whether this is safe could not run: "
+                + m.evidence for m in missing
+            ] + [_reason(r) for r in real_queries],
+            notes=notes,
             not_checked=not_checked,
             limits=limits,
             results=results,
@@ -102,20 +131,7 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
             outcome=QUERY,
             headline=primary.evidence.split(". ")[0].rstrip(".") + ".",
             reasons=[_reason(r) for r in real_queries],
-            not_checked=not_checked,
-            limits=limits,
-            results=results,
-        )
-
-    if _material_unknowns(unknowns):
-        return Verdict(
-            outcome=QUERY,
-            headline=("Not enough of this invoice could be read to say it is "
-                      "safe to pay."),
-            reasons=[
-                "Checks that decide whether an invoice is safe could not run "
-                "on this document. That is not the same as passing them."
-            ],
+            notes=notes,
             not_checked=not_checked,
             limits=limits,
             results=results,
@@ -131,6 +147,7 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
         outcome=SAFE,
         headline=headline,
         reasons=reasons,
+        notes=notes,
         not_checked=not_checked,
         limits=limits,
         results=results,
@@ -152,7 +169,19 @@ def _most_severe(results: list[CheckResult]) -> CheckResult:
 
 
 def _reason(r: CheckResult) -> str:
-    return f"{r.title}. {r.evidence}".strip()
+    """The evidence alone.
+
+    Check titles are phrased as the passing assertion, so gluing the title
+    to a failure produced sentences that contradicted themselves:
+    "We have dealt with this supplier before. No record of ever dealing
+    with this supplier."
+    """
+    return (r.evidence or r.title).strip()
+
+
+def _action(r: CheckResult) -> str | None:
+    """What the person should actually do about it."""
+    return (r.detail or {}).get("action")
 
 
 def render_text(verdict: Verdict, doc=None) -> str:
@@ -172,7 +201,9 @@ def render_text(verdict: Verdict, doc=None) -> str:
         amt = ""
         if doc.total_cents is not None:
             from .model import from_cents
-            amt = f" for {doc.currency or ''} {from_cents(doc.total_cents)}".rstrip()
+            cur = doc.currency or "$"
+            sep = " " if doc.currency else ""
+            amt = f" for {cur}{sep}{from_cents(doc.total_cents)}"
         lines.append(f"  {who}, invoice {num}{amt}")
         lines.append(f"  arrived by {doc.channel.value}")
         lines.append("")
@@ -181,6 +212,18 @@ def render_text(verdict: Verdict, doc=None) -> str:
         lines.append("Why:")
         for r in verdict.reasons:
             lines.append(f"  - {r}")
+        lines.append("")
+
+    if verdict.actions:
+        lines.append("What to do:")
+        for a in verdict.actions:
+            lines.append(f"  {a}")
+        lines.append("")
+
+    if verdict.notes:
+        lines.append("Worth knowing (does not stop you paying):")
+        for n in verdict.notes:
+            lines.append(f"  - {n}")
         lines.append("")
 
     passed = [r for r in verdict.results if r.status is Status.PASS]

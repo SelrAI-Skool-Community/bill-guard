@@ -289,16 +289,21 @@ def abn_present_and_valid(doc: Document, ledger, ctx) -> CheckResult:
     formatted = au.abn_format(doc.supplier_abn)
     result = _lookup(ctx, "abr", doc.supplier_abn)
     if result is None:
-        return unknown(
-            "B01", abn_present_and_valid.title,
-            f"ABN {formatted} passes the checksum, but no ABR lookup client "
-            "was supplied, so register confirmation is unavailable")
+        # A valid checksum is a real, deterministic result on its own. The
+        # register lookup is an enhancement, never a precondition. Requiring
+        # it would mean a business with nothing configured could never see a
+        # green verdict, which defeats the point of the tool working the
+        # moment it is plugged in. Register confirmation lives in B03.
+        return ok("B01", abn_present_and_valid.title,
+                  f"ABN {formatted} passes the checksum")
     evidence = (f"ABN {formatted} passes the checksum; {result.source} was "
                 f"asked on {result.observed_at}; cache={result.cache}")
     if result.status == "unknown":
-        return unknown("B01", abn_present_and_valid.title,
-                       evidence + f"; lookup unavailable: {result.error}",
-                       lookup=result.to_dict())
+        # The checksum still passed. A register that could not be reached
+        # does not undo arithmetic.
+        return ok("B01", abn_present_and_valid.title,
+                  evidence + f"; register unreachable: {result.error}",
+                  lookup=result.to_dict())
     if result.status == "not_found":
         return fail("B01", abn_present_and_valid.title,
                     Severity.HOLD, FPRisk.LOW,
@@ -331,11 +336,15 @@ def buyer_identity_present(doc: Document, ledger, ctx) -> CheckResult:
             f"total ${from_cents(doc.total_cents)} is below the threshold")
     if doc.buyer_name or doc.buyer_abn:
         return ok("B02", buyer_identity_present.title, "buyer identified")
+    # A note about the supplier's paperwork, not a reason to withhold
+    # payment. The recipient of an invoice cannot fix its format, and
+    # gating on it would put a warning on a large share of ordinary bills.
     return fail("B02", buyer_identity_present.title,
-                Severity.QUERY, FPRisk.LOW,
-                f"At ${from_cents(doc.total_cents)} this invoice must also "
-                f"identify the buyer by name or ABN, and it does not. It is "
-                f"not a valid tax invoice as it stands.")
+                Severity.INFO, FPRisk.LOW,
+                f"At ${from_cents(doc.total_cents)} an invoice must also name "
+                f"the buyer or their ABN, and this one does not. It is safe "
+                f"to pay, but ask the supplier to reissue it if you want the "
+                f"GST credit to stand up.")
 
 
 @check("B03", "Supplier ABN appears in the supplied ABR lookup", "identity")
@@ -550,7 +559,7 @@ def no_abn_withholding(doc: Document, ledger, ctx) -> CheckResult:
                   f"the ${from_cents(au.NO_ABN_WITHHOLDING_THRESHOLD_CENTS)} "
                   f"threshold")
     return fail("F05", no_abn_withholding.title,
-                Severity.QUERY, FPRisk.LOW,
+                Severity.INFO, FPRisk.LOW,
                 f"No valid ABN is quoted and the payment is "
                 f"${from_cents(base)}. Withholding of "
                 f"${from_cents(withhold)} may be required, and the penalty "

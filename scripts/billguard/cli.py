@@ -5,8 +5,10 @@ request, because the point of this thing is that anything can call it: a
 person at a terminal, a scheduled routine, an agent's tool call, or another
 system entirely.
 
-    billguard check invoice.json            human-readable verdict
-    billguard check invoice.json --json     machine-readable verdict
+    billguard check invoice.pdf             human-readable verdict
+    billguard check invoice.pdf --json      machine-readable verdict
+    billguard read invoice.pdf              show what was read off it
+    pbpaste | billguard check -             check pasted text
     billguard scan-codes invoice.png        decode and explain every code
     billguard ledger stats
     billguard ledger record-payment ...
@@ -92,6 +94,8 @@ def document_from_dict(data: dict) -> Document:
     except ValueError:
         channel = Channel.UNKNOWN
 
+    unknown_keys = sorted(set(data) - _KNOWN_KEYS)
+
     doc = Document(
         doc_id=data.get("doc_id") or "",
         channel=channel,
@@ -121,7 +125,21 @@ def document_from_dict(data: dict) -> Document:
     )
     if not doc.doc_id:
         doc.doc_id = doc.content_hash()
+    doc.artifacts.setdefault("_unknown_keys", unknown_keys)
     return doc
+
+
+#: Everything document_from_dict understands. Anything else is a typo, and a
+#: silently discarded field produces a confident verdict computed from
+#: nothing, which is worse than an error.
+_KNOWN_KEYS = frozenset({
+    "doc_id", "channel", "received_at", "supplier_name", "supplier_abn",
+    "supplier_domain", "supplier_country", "buyer_name", "buyer_abn",
+    "invoice_number", "issue_date", "due_date", "po_reference", "currency",
+    "subtotal", "subtotal_cents", "tax", "tax_cents", "total", "total_cents",
+    "balance_due", "balance_due_cents", "line_items", "payment",
+    "doc_type_words", "raw_text", "text_source", "artifacts", "jurisdiction",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -129,20 +147,66 @@ def document_from_dict(data: dict) -> Document:
 # ---------------------------------------------------------------------------
 
 def cmd_check(args) -> int:
-    try:
-        data = json.loads(Path(args.document).read_text())
-    except FileNotFoundError:
-        print(f"no such file: {args.document}", file=sys.stderr)
-        return EXIT_ERROR
-    except json.JSONDecodeError as exc:
-        print(f"not valid JSON: {exc}", file=sys.stderr)
-        return EXIT_ERROR
+    """Assess whatever the user actually has: a PDF, a photo, an email,
+    a text file, pasted text, or a prepared JSON document."""
+    from . import intake
 
-    try:
-        doc = document_from_dict(data)
-    except ValueError as exc:
-        print(f"could not read the document: {exc}", file=sys.stderr)
+    path = Path(args.document)
+    gaps: list = []
+
+    if args.document == "-":
+        text = sys.stdin.read()
+        if not text.strip():
+            print("Nothing was piped in. Paste the invoice text and press "
+                  "Ctrl-D, or give a file instead.", file=sys.stderr)
+            return EXIT_ERROR
+        ex = intake.from_text(text)
+        doc, gaps = ex.document, ex.gaps
+        if not ex.looks_like_an_invoice:
+            print(_not_an_invoice("what you pasted"), file=sys.stderr)
+            return EXIT_ERROR
+    elif not path.exists():
+        print(f"There is no file at {args.document}.\n"
+              f"Give the path to an invoice: a PDF, a photo, a saved email, "
+              f"a text file, or paste the text with:  billguard check -",
+              file=sys.stderr)
         return EXIT_ERROR
+    elif path.suffix.lower() == ".json":
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError as exc:
+            print(f"That file ends in .json but is not valid JSON "
+                  f"({exc.msg} at line {exc.lineno}).\n"
+                  f"If it is an invoice, rename it or pass the PDF instead.",
+                  file=sys.stderr)
+            return EXIT_ERROR
+        try:
+            doc = document_from_dict(data)
+        except ValueError as exc:
+            print(f"That JSON could not be read as an invoice: {exc}",
+                  file=sys.stderr)
+            return EXIT_ERROR
+        stray = doc.artifacts.get("_unknown_keys") or []
+        if stray:
+            gaps.append(
+                "These fields were not recognised and were ignored: "
+                + ", ".join(stray)
+                + ". Check them for typos, because anything misspelled here "
+                  "was simply not read.")
+    else:
+        ex = intake.from_file(args.document)
+        doc, gaps = ex.document, ex.gaps
+        if ex.ok and not ex.looks_like_an_invoice:
+            print(_not_an_invoice(args.document), file=sys.stderr)
+            for g in gaps:
+                print(f"  {g}", file=sys.stderr)
+            return EXIT_ERROR
+        if not ex.ok and not doc.artifacts.get("qr_codes"):
+            print(f"Nothing could be read from {args.document}.",
+                  file=sys.stderr)
+            for g in gaps:
+                print(f"  {g}", file=sys.stderr)
+            return EXIT_ERROR
 
     ledger = Ledger(args.ledger) if args.ledger else None
     try:
@@ -157,10 +221,26 @@ def cmd_check(args) -> int:
         out = verdict.to_dict()
         out["doc_id"] = doc.doc_id
         out["version"] = __version__
+        out["read_problems"] = gaps
         print(json.dumps(out, indent=2))
     else:
         print(render_text(verdict, doc))
+        if gaps:
+            print()
+            print("Trouble reading this document:")
+            for g in gaps:
+                print(f"  - {g}")
     return _EXIT[verdict.outcome]
+
+
+def _not_an_invoice(what: str) -> str:
+    return (
+        f"{what} does not look like an invoice or a bill.\n"
+        f"Nothing in it asks for money: no amount, no invoice number, no "
+        f"ABN and no payment details.\n"
+        f"Checking it anyway would produce an official-looking verdict about "
+        f"a document that was never a bill, so nothing was checked.\n"
+        f"Run 'billguard read <file>' to see exactly what was found on it.")
 
 
 def _remember(ledger: Ledger, doc: Document, verdict) -> None:
@@ -199,6 +279,18 @@ def cmd_scan_codes(args) -> int:
         if args.json:
             print(json.dumps({"decoders": [], "codes": [],
                               "status": "unknown"}, indent=2))
+        return EXIT_ERROR
+
+    import os
+    if not os.path.isfile(args.image):
+        print(f"There is no file at {args.image}. Nothing was scanned.\n"
+              f"Reporting this as clean would be a silent pass.",
+              file=sys.stderr)
+        return EXIT_ERROR
+    if os.path.splitext(args.image)[1].lower() == ".pdf":
+        print("This is a PDF. Use 'billguard check' or 'billguard read' on "
+              "it, which renders every page and scans them all.",
+              file=sys.stderr)
         return EXIT_ERROR
 
     codes = qr.decode_image(args.image)
@@ -253,19 +345,252 @@ def cmd_scan_codes(args) -> int:
     return EXIT_HOLD if len(payment_like) > 1 else EXIT_SAFE
 
 
+def _record_payment(led: Ledger, args) -> int:
+    """Record that a payment actually went out.
+
+    This is the single most important thing a person ever tells the tool,
+    because every bank-change check is measured against it. It used to
+    accept anything at all, and a one-character typo in the supplier key
+    silently downgraded a fraud HOLD to a shrug: the check could no longer
+    find any history, so it reported unknown and a smaller finding took the
+    headline. Garbage in here disarms the product quietly, which is the
+    worst possible failure. So it validates, and it refuses.
+    """
+    if not args.supplier_key or not args.fingerprint:
+        print("Tell it which supplier and which account was paid:\n"
+              "  billguard ledger record-payment --ledger <file> \\\n"
+              "      --supplier-key abn:98273029681 \\\n"
+              "      --fingerprint au:062000:12345678 --when 2026-08-11\n\n"
+              "Run 'billguard check <invoice> --json' and look at "
+              "checks -> D01 -> detail for the exact values for an invoice.",
+              file=sys.stderr)
+        return EXIT_ERROR
+
+    key = args.supplier_key.strip()
+    if key.startswith("abn:"):
+        from . import au
+        digits = au.digits(key[4:])
+        if not au.abn_is_valid(digits):
+            print(f"'{key}' is not a valid supplier key: the ABN in it fails "
+                  f"its checksum, so it is not a real ABN.\n"
+                  f"A mistyped key means the tool cannot find this supplier's "
+                  f"history, and the bank-detail check stops working for "
+                  f"them. Nothing was recorded.", file=sys.stderr)
+            return EXIT_ERROR
+        key = "abn:" + digits
+    elif not key.startswith("name:"):
+        print(f"'{key}' is not a supplier key. It must start with 'abn:' "
+              f"followed by the supplier's ABN, or 'name:' if they have "
+              f"none. Nothing was recorded.", file=sys.stderr)
+        return EXIT_ERROR
+
+    fp = args.fingerprint.strip()
+    if not _fingerprint_is_sane(fp):
+        print(f"'{fp}' is not a payment destination this tool recognises.\n"
+              f"It should look like  au:062000:12345678  (BSB then account), "
+              f"or iban:DE89..., payid:..., or bpay:12345.\n"
+              f"Nothing was recorded, because a wrong value here silently "
+              f"switches off the check that catches changed bank details.",
+              file=sys.stderr)
+        return EXIT_ERROR
+
+    known = led.is_known_supplier(key)
+    if not known and not args.force:
+        print(f"'{key}' has never been seen on any invoice you have checked.\n"
+              f"Check that supplier's invoice first so the tool knows them, "
+              f"or pass --force if you are certain. Nothing was recorded.",
+              file=sys.stderr)
+        return EXIT_ERROR
+
+    when = args.when or _today()
+    led.record_destination(key, fp, {"recorded_by": "human"}, when)
+    led.mark_destination_paid(key, fp, when)
+    led.add_evidence(when, "payment-recorded",
+                     detail={"supplier": key, "destination": fp})
+    print(f"Recorded: you paid {key} at {fp} on {when}.\n"
+          f"From now on any invoice from them naming a different account "
+          f"will be held.")
+    return EXIT_SAFE
+
+
+def _fingerprint_is_sane(fp: str) -> bool:
+    import re
+    if fp.startswith("au:"):
+        return bool(re.fullmatch(r"au:\d{6}:\d{5,10}", fp))
+    if fp.startswith("iban:"):
+        from .qr import iban_checksum_ok
+        return iban_checksum_ok(fp[5:])
+    if fp.startswith("bpay:"):
+        return fp[5:].isdigit() and 4 <= len(fp[5:]) <= 6
+    if fp.startswith(("payid:", "crypto:")):
+        return len(fp.split(":", 1)[1]) >= 3
+    return False
+
+
+def _today() -> str:
+    import datetime
+    return datetime.date.today().isoformat()
+
+
+def cmd_paid(args) -> int:
+    """Tell it you paid an invoice, by pointing at the invoice.
+
+    The supplier key and the destination fingerprint are internal
+    vocabulary. Nobody outside this codebase should ever have to type
+    "au:062000:12345678", and asking them to was the single biggest thing
+    standing between a business owner and the one check that matters.
+    """
+    from . import intake
+
+    path = Path(args.document)
+    if not path.exists():
+        print(f"There is no file at {args.document}. Point this at the "
+              f"invoice you paid.", file=sys.stderr)
+        return EXIT_ERROR
+
+    if path.suffix.lower() == ".json":
+        try:
+            doc = document_from_dict(json.loads(path.read_text()))
+        except Exception as exc:
+            print(f"That file could not be read: {exc}", file=sys.stderr)
+            return EXIT_ERROR
+    else:
+        doc = intake.from_file(args.document).document
+
+    key = doc.supplier_key()
+    fp = doc.payment.fingerprint()
+    if key is None:
+        print("Could not tell who this invoice is from, so there is nothing "
+              "to remember. Run 'billguard read' on it to see what was "
+              "found.", file=sys.stderr)
+        return EXIT_ERROR
+    if fp is None:
+        print("No payment details could be read off this invoice, so there "
+              "is no account to remember. Run 'billguard read' on it to see "
+              "what was found.", file=sys.stderr)
+        return EXIT_ERROR
+
+    when = args.when or _today()
+    with Ledger(args.ledger) as led:
+        if not led.is_known_supplier(key):
+            led.upsert_supplier(key, doc.supplier_name, doc.supplier_abn, when)
+        led.record_destination(key, fp, {
+            "bsb": doc.payment.bsb,
+            "account_number": doc.payment.account_number,
+            "account_name": doc.payment.account_name,
+            "iban": doc.payment.iban,
+        }, when)
+        led.mark_destination_paid(key, fp, when)
+        if doc.doc_id:
+            led.mark_document_paid(doc.doc_id, when)
+        led.add_evidence(when, "payment-recorded", doc.doc_id,
+                         actor="human",
+                         detail={"supplier": key, "destination": fp})
+
+    who = doc.supplier_name or key
+    where = (f"BSB {doc.payment.bsb} account {doc.payment.account_number}"
+             if doc.payment.bsb else fp)
+    print(f"Noted: you paid {who} at {where} on {when}.\n"
+          f"If an invoice from them ever names a different account, it will "
+          f"be held.")
+    return EXIT_SAFE
+
+
+def cmd_read(args) -> int:
+    """Show what was actually read off a document, and what was not.
+
+    Transparency matters more here than anywhere else: if a person cannot
+    see what the tool read, they cannot tell a correct verdict from a
+    confident wrong one.
+    """
+    from . import intake
+    ex = intake.from_file(args.document)
+    doc = ex.document
+
+    if args.json:
+        out = {
+            "supplier_name": doc.supplier_name,
+            "supplier_abn": doc.supplier_abn,
+            "supplier_domain": doc.supplier_domain,
+            "invoice_number": doc.invoice_number,
+            "issue_date": doc.issue_date,
+            "due_date": doc.due_date,
+            "currency": doc.currency,
+            "subtotal_cents": doc.subtotal_cents,
+            "tax_cents": doc.tax_cents,
+            "total_cents": doc.total_cents,
+            "balance_due_cents": doc.balance_due_cents,
+            "payment": {
+                "bsb": doc.payment.bsb,
+                "account_number": doc.payment.account_number,
+                "bpay_biller": doc.payment.bpay_biller,
+                "iban": doc.payment.iban,
+                "confidence": doc.payment.confidence,
+            },
+            "confidence": ex.confidence,
+            "problems": ex.gaps,
+            "codes_found": len(doc.artifacts.get("qr_codes") or []),
+        }
+        print(json.dumps(out, indent=2))
+        return EXIT_SAFE
+
+    from .model import from_cents
+    print(f"Read from {args.document}\n")
+
+    def row(label, value, key=None):
+        if value in (None, ""):
+            print(f"  {label:<18} not found")
+            return
+        c = ex.confidence.get(key or "", None)
+        mark = ""
+        if c is not None:
+            mark = "  (certain)" if c >= 0.95 else (
+                "  (fairly sure)" if c >= 0.7 else "  (a guess, check it)")
+        print(f"  {label:<18} {value}{mark}")
+
+    row("Supplier", doc.supplier_name, "supplier_name")
+    row("ABN", doc.supplier_abn, "supplier_abn")
+    row("Invoice number", doc.invoice_number, "invoice_number")
+    row("Issued", doc.issue_date, "issue_date")
+    row("Due", doc.due_date, "due_date")
+    row("Currency", doc.currency, "currency")
+    for label, cents, key in (("Subtotal", doc.subtotal_cents, "subtotal_cents"),
+                              ("GST", doc.tax_cents, "tax_cents"),
+                              ("Total", doc.total_cents, "total_cents"),
+                              ("Balance due", doc.balance_due_cents,
+                               "balance_due_cents")):
+        row(label, from_cents(cents) if cents is not None else None, key)
+
+    print()
+    if doc.payment.is_empty():
+        print("  No bank details found on this document.")
+    else:
+        print(f"  Pay to           BSB {doc.payment.bsb or '-'}  "
+              f"account {doc.payment.account_number or '-'}"
+              f"{'  BPAY ' + doc.payment.bpay_biller if doc.payment.bpay_biller else ''}")
+        print(f"                   read with confidence "
+              f"{doc.payment.confidence:.0%}")
+
+    codes = doc.artifacts.get("qr_codes") or []
+    if codes:
+        print(f"\n  {len(codes)} barcode(s) found on the page.")
+        for c in codes:
+            print(f"    page {c['page'] + 1}: {c['scheme']}"
+                  f"{'  -> ' + c['destination'] if c.get('destination') else ''}")
+
+    if ex.gaps:
+        print("\nTrouble reading this document:")
+        for g in ex.gaps:
+            print(f"  - {g}")
+    return EXIT_SAFE
+
+
 def cmd_ledger(args) -> int:
     with Ledger(args.ledger) as led:
         if args.ledger_command == "stats":
             print(json.dumps(led.stats(), indent=2))
         elif args.ledger_command == "record-payment":
-            led.record_destination(args.supplier_key, args.fingerprint, {},
-                                   args.when)
-            led.mark_destination_paid(args.supplier_key, args.fingerprint,
-                                      args.when)
-            led.add_evidence(args.when, "payment-recorded",
-                             detail={"supplier": args.supplier_key,
-                                     "destination": args.fingerprint})
-            print(f"recorded a paid destination for {args.supplier_key}")
+            return _record_payment(led, args)
         elif args.ledger_command == "suppliers":
             rows = led._conn.execute(
                 "SELECT supplier_key, display_name, invoice_count, paid_count "
@@ -315,7 +640,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     c = sub.add_parser("check", help="assess one invoice")
-    c.add_argument("document", help="path to a JSON document")
+    c.add_argument("document",
+                   help="an invoice: PDF, photo, saved email, text file, "
+                        "prepared JSON, or - to paste text")
     c.add_argument("--ledger", help="path to the supplier ledger database")
     c.add_argument("--json", action="store_true", help="machine-readable output")
     c.add_argument("--remember", action="store_true",
@@ -328,13 +655,28 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--json", action="store_true")
     s.set_defaults(func=cmd_scan_codes)
 
+    pd = sub.add_parser("paid",
+                        help="tell it you paid an invoice, by pointing at it")
+    pd.add_argument("document", help="the invoice you paid")
+    pd.add_argument("--ledger", required=True)
+    pd.add_argument("--when", default="", help="e.g. 2026-08-11, default today")
+    pd.set_defaults(func=cmd_paid)
+
+    rd = sub.add_parser("read", help="show what was read off a document")
+    rd.add_argument("document")
+    rd.add_argument("--json", action="store_true")
+    rd.set_defaults(func=cmd_read)
+
     lg = sub.add_parser("ledger", help="inspect or update the supplier ledger")
     lg.add_argument("ledger_command",
                     choices=["stats", "record-payment", "suppliers"])
     lg.add_argument("--ledger", required=True)
     lg.add_argument("--supplier-key", dest="supplier_key")
     lg.add_argument("--fingerprint")
-    lg.add_argument("--when", default="")
+    lg.add_argument("--when", default="",
+                    help="the date it was paid, e.g. 2026-08-11")
+    lg.add_argument("--force", action="store_true",
+                    help="record a supplier the tool has never seen")
     lg.set_defaults(func=cmd_ledger)
 
     st = sub.add_parser("selftest", help="run the test suite")

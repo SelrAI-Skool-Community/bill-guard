@@ -96,12 +96,21 @@ def b01_holds_when_register_says_abn_is_cancelled():
 
 
 @test
-def b01_is_unknown_when_offline_lookup_cannot_answer():
+def b01_still_passes_when_the_register_is_unreachable():
+    """A register that cannot be reached does not undo arithmetic.
+
+    The checksum is a real, deterministic result. Making register
+    confirmation a precondition meant a business with nothing configured
+    could never reach a green verdict, which defeats the point of a tool
+    that is supposed to work the moment it is plugged in. Register
+    confirmation is a separate check, B03.
+    """
     result = _by_id(run_all(_doc(), None, {"lookup_clients": {
         "abr": FakeLookup(_result("unknown", "ABR fixture",
                                   error="offline"))}}), "B01")
-    eq(result.status, Status.UNKNOWN)
-    true("offline" in result.evidence)
+    eq(result.status, Status.PASS)
+    true("offline" in result.evidence, "must still say the register failed")
+    true("passes the checksum" in result.evidence)
 
 
 @test
