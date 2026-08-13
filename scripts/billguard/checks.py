@@ -231,6 +231,12 @@ def abn_present_and_valid(doc: Document, ledger, ctx) -> CheckResult:
     about a completely different company.
     """
     if not doc.supplier_abn:
+        if doc.is_foreign_supplier():
+            return not_applicable(
+                "B01", abn_present_and_valid.title,
+                "this is an overseas supplier, which is not required to hold "
+                "or quote an ABN. Applying the Australian rule here would "
+                "raise a finding on every single overseas invoice.")
         return fail("B01", abn_present_and_valid.title,
                     Severity.QUERY, FPRisk.LOW,
                     "No ABN appears on this document. It is not a valid tax "
@@ -281,6 +287,12 @@ def declares_tax_invoice(doc: Document, ledger, ctx) -> CheckResult:
     if not text.strip():
         return unknown("F01", declares_tax_invoice.title,
                        "no document text available to search")
+    if doc.text_source != "document":
+        return unknown(
+            "F01", declares_tax_invoice.title,
+            "only the covering email was read, and the words that make a "
+            "document a tax invoice normally sit in the attached file. "
+            "Searching an email body cannot answer this either way.")
     return fail("F01", declares_tax_invoice.title,
                 Severity.QUERY, FPRisk.MODERATE,
                 "The document does not say it is a tax invoice. A structured "
@@ -396,6 +408,11 @@ def no_abn_withholding(doc: Document, ledger, ctx) -> CheckResult:
     """
     if doc.supplier_abn and au.abn_is_valid(doc.supplier_abn):
         return ok("F05", no_abn_withholding.title, "a valid ABN is quoted")
+    if doc.is_foreign_supplier():
+        return not_applicable(
+            "F05", no_abn_withholding.title,
+            "no-ABN withholding applies to payments to Australian "
+            "enterprises, not to an overseas supplier")
     base = doc.subtotal_cents
     if base is None:
         base = doc.total_cents
@@ -492,11 +509,16 @@ def already_settled(doc: Document, ledger, ctx) -> CheckResult:
     if doc.balance_due_cents > 0:
         return ok("G02", already_settled.title,
                   f"balance due {from_cents(doc.balance_due_cents)}")
+    # Nothing is owed, so nothing can be paid twice by acting on this. That
+    # is not a fraud hold, it is a receipt. Calling it HOLD would put a red
+    # verdict on every payment confirmation a business receives, which is
+    # how a checker teaches its user to ignore it.
     return fail("G02", already_settled.title,
-                Severity.HOLD, FPRisk.NONE,
+                Severity.SETTLED, FPRisk.NONE,
                 f"This document shows a balance due of "
-                f"{from_cents(doc.balance_due_cents)}. It has already been "
-                f"paid and is a receipt, not a bill.")
+                f"{from_cents(doc.balance_due_cents)}. It is a receipt for "
+                f"something already paid, not a bill. File it; there is "
+                f"nothing to action.")
 
 
 @check("G03", "Invoice is not dated after it was paid", "duplicate")
@@ -656,6 +678,20 @@ def wants_a_phone_call(doc: Document, ledger, ctx) -> CheckResult:
     if not doc.payment.is_empty():
         return ok("H02", wants_a_phone_call.title,
                   "the document supplies payment details")
+    if doc.balance_due_cents is not None and doc.balance_due_cents <= 0:
+        return not_applicable(
+            "H02", wants_a_phone_call.title,
+            "nothing is owed on this document, so the absence of payment "
+            "details is exactly what a receipt looks like")
+    if doc.balance_due_cents is None and doc.total_cents is None:
+        # The scam shape is "an amount is stated, but the only way to act on
+        # it is a phone call". With no amount demanded at all this is a
+        # notification -- a renewal reminder, a statement, a confirmation --
+        # and the absence of payment details is simply correct.
+        return not_applicable(
+            "H02", wants_a_phone_call.title,
+            "no amount is being demanded, so this is a notice rather than a "
+            "bill and there is nothing to pay")
     if not _PHONE_ONLY_HINT_RE.search(text):
         return unknown("H02", wants_a_phone_call.title,
                        "no payment details found and no support number "

@@ -80,6 +80,7 @@ class Status(str, Enum):
 class Severity(str, Enum):
     HOLD = "hold"            # do not pay
     QUERY = "query"          # a human must answer something first
+    SETTLED = "settled"      # nothing is owed: file it, take no action
     INFO = "info"            # worth knowing, does not gate payment
 
 
@@ -217,6 +218,14 @@ def _digits(s: str) -> str:
     return re.sub(r"\D", "", s or "")
 
 
+#: Entity suffixes that do not exist in the Australian register. An
+#: Australian entity is Pty Ltd, Ltd, Co, or a trust; none of these.
+_FOREIGN_SUFFIX_RE = re.compile(
+    r"\b(inc\.?|incorporated|l\.?l\.?c\.?|corp\.?|corporation|"
+    r"p\.?b\.?c\.?|b\.?v\.?|n\.?v\.?|gmbh|s\.?a\.?r\.?l\.?|"
+    r"s\.?p\.?a\.?|a\.?g\.?|oy|ab|as|plc|s\.?l\.?)\s*$", re.I)
+
+
 @dataclass
 class LineItem:
     description: str = ""
@@ -257,6 +266,11 @@ class Document:
 
     doc_type_words: str = ""    # raw text of any "tax invoice" / "RCTI" marker
     raw_text: str = ""
+    #: Where raw_text came from. An email body is NOT the invoice: the words
+    #: that make a document a tax invoice usually live in the attached PDF,
+    #: so a check that searches an email body can only ever report UNKNOWN.
+    text_source: str = "unknown"      # email_body | document | unknown
+    supplier_country: str | None = None
     artifacts: dict = field(default_factory=dict)   # qr payloads, urls, etc
     jurisdiction: str = "AU"
 
@@ -268,6 +282,29 @@ class Document:
             "t": self.total_cents,
         }, sort_keys=True)
         return hashlib.sha1(basis.encode("utf-8")).hexdigest()
+
+    def is_foreign_supplier(self) -> bool:
+        """Is this supplier plainly not an Australian enterprise?
+
+        Australian tax rules -- quote an ABN, show GST, withhold when no ABN
+        is given -- bind Australian enterprises. Applying them to a US or
+        Dutch software company generates a finding on every single overseas
+        invoice, which is exactly how a checker trains its user to ignore it.
+
+        Deliberately conservative: it only says foreign when the evidence is
+        explicit. An unknown supplier is treated as domestic, because a
+        missing ABN on an Australian supplier is a real finding.
+        """
+        if self.supplier_abn:
+            return False
+        if self.supplier_country and self.supplier_country.upper() not in ("AU", "AUS", "AUSTRALIA"):
+            return True
+        if self.currency and self.currency.upper() not in ("AUD", ""):
+            return True
+        name = (self.supplier_name or "").strip()
+        if name and _FOREIGN_SUFFIX_RE.search(name):
+            return True
+        return False
 
     def supplier_key(self) -> str | None:
         """Ledger key for a supplier. ABN wins; name is the weak fallback.

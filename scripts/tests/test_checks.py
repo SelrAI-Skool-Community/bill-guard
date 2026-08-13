@@ -12,7 +12,7 @@ from billguard.ledger import Ledger
 from billguard.model import (
     Channel, Document, FPRisk, LineItem, PaymentInstruction, Severity, Status,
 )
-from billguard.verdict import HOLD, QUERY, SAFE
+from billguard.verdict import HOLD, QUERY, SAFE, SETTLED
 
 
 def _doc(**kw) -> Document:
@@ -268,11 +268,102 @@ def line_items_must_sum_to_subtotal():
 
 @test
 def a_zero_balance_document_is_a_receipt_not_a_bill():
+    """A receipt must never read as a fraud hold.
+
+    Found on real data: 8 of 15 genuine invoices from Luke's inbox were
+    payment confirmations, and every one came back HOLD. That is how a
+    checker teaches its user to ignore it.
+    """
     doc = _doc(balance_due_cents=0)
     r = _by_id(run_all(doc, None), "G02")
     eq(r.status, Status.FAIL)
+    eq(r.severity, Severity.SETTLED, "a receipt is settled, not a hold")
+    true("nothing to action" in r.evidence)
+
+    v = assess(doc, None)
+    eq(v.outcome, SETTLED)
+
+
+@test
+def a_receipt_with_a_real_hold_still_holds():
+    """Settled outranks noise, never a genuine hold."""
+    led = _ledger_with_history("au:062000:12345678")
+    doc = _doc(balance_due_cents=0)
+    doc.payment = PaymentInstruction(bsb="083-004", account_number="99887766",
+                                     confidence=0.99)
+    v = assess(doc, led)
+    eq(v.outcome, HOLD, "an altered receipt is still worth stopping on")
+    led.close()
+
+
+@test
+def an_overseas_supplier_is_not_asked_for_an_abn():
+    """Applying the Australian rule to a US or Dutch company raises a
+    finding on every single overseas invoice."""
+    for name in ("Anthropic, PBC", "Vercel Inc.", "Framer B.V.",
+                 "Eleven Labs Inc."):
+        doc = _doc(supplier_name=name, supplier_abn=None, currency=None)
+        eq(_by_id(run_all(doc, None), "B01").status, Status.NOT_APPLICABLE,
+           name)
+        eq(_by_id(run_all(doc, None), "F05").status, Status.NOT_APPLICABLE,
+           name)
+
+
+@test
+def an_australian_supplier_with_no_abn_is_still_a_finding():
+    doc = _doc(supplier_name="Bob's Plumbing Pty Ltd", supplier_abn=None)
+    eq(_by_id(run_all(doc, None), "B01").status, Status.FAIL)
+
+
+@test
+def foreign_currency_alone_marks_a_supplier_overseas():
+    doc = _doc(supplier_name="Ambiguous Trading", supplier_abn=None,
+               currency="USD")
+    eq(_by_id(run_all(doc, None), "B01").status, Status.NOT_APPLICABLE)
+
+
+@test
+def an_email_body_cannot_answer_whether_it_is_a_tax_invoice():
+    """The words live in the attached PDF, not the covering email."""
+    doc = _doc(doc_type_words="", raw_text="Please find your invoice attached",
+               text_source="email_body")
+    eq(_by_id(run_all(doc, None), "F01").status, Status.UNKNOWN)
+
+    doc = _doc(doc_type_words="", raw_text="Invoice 123 amount due",
+               text_source="document")
+    eq(_by_id(run_all(doc, None), "F01").status, Status.FAIL)
+
+
+@test
+def a_receipt_with_no_payment_details_is_not_the_phone_scam():
+    """A card-charged receipt legitimately has no bank details."""
+    doc = _doc(balance_due_cents=0, payment=PaymentInstruction(),
+               raw_text="Thanks for your payment. Contact our support team "
+                        "with any questions.")
+    eq(_by_id(run_all(doc, None), "H02").status, Status.NOT_APPLICABLE)
+
+
+@test
+def a_renewal_notice_demanding_nothing_is_not_the_phone_scam():
+    """Found on real data: a subscription renewal reminder with no amount,
+    no invoice number and no payment request came back HOLD."""
+    doc = _doc(total_cents=None, balance_due_cents=None, subtotal_cents=None,
+               tax_cents=None, payment=PaymentInstruction(),
+               raw_text="Your subscription will renew on August 16. Your "
+                        "payment method on file will be charged. Contact our "
+                        "support team with any questions.")
+    eq(_by_id(run_all(doc, None), "H02").status, Status.NOT_APPLICABLE)
+    eq(assess(doc, None).outcome, QUERY, "a notice is never a hold")
+
+
+@test
+def an_amount_owed_with_no_way_to_pay_still_fires():
+    doc = _doc(balance_due_cents=49900, payment=PaymentInstruction(),
+               raw_text="Your subscription renewed for $499.00. "
+                        "To cancel please call our support team.")
+    r = _by_id(run_all(doc, None), "H02")
+    eq(r.status, Status.FAIL)
     eq(r.severity, Severity.HOLD)
-    true("already been paid" in r.evidence)
 
 
 @test

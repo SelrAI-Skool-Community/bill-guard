@@ -23,6 +23,7 @@ from .model import CheckResult, FPRisk, Severity, Status
 SAFE = "SAFE TO PAY"
 QUERY = "QUERY"
 HOLD = "HOLD"
+SETTLED = "NOTHING TO PAY"   # a receipt: already settled, file it
 
 
 @dataclass
@@ -62,6 +63,7 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
 
     holds = [r for r in fired if r.severity is Severity.HOLD]
     queries = [r for r in fired if r.severity is Severity.QUERY]
+    settled = [r for r in fired if r.severity is Severity.SETTLED]
 
     # A high false-positive-risk finding never gates payment on its own.
     weak_only_queries = [r for r in queries if r.fp_risk is FPRisk.HIGH]
@@ -69,6 +71,19 @@ def decide(results: list[CheckResult], doc=None) -> Verdict:
 
     limits = [BANK_OWNERSHIP_LIMIT]
     not_checked = [f"{r.check_id}: {r.title} ({r.evidence})" for r in unknowns]
+
+    # A receipt is not a fraud finding. Nothing is owed, so nothing can be
+    # paid twice by acting on it. Only a genuine hold outranks this: an
+    # altered receipt is still worth stopping on.
+    if settled and not holds:
+        return Verdict(
+            outcome=SETTLED,
+            headline="Nothing is owed on this document. It is a receipt.",
+            reasons=[_reason(r) for r in settled],
+            not_checked=[],
+            limits=limits,
+            results=results,
+        )
 
     if holds:
         primary = _most_severe(holds)
@@ -147,7 +162,7 @@ def render_text(verdict: Verdict, doc=None) -> str:
     second time.
     """
     lines = []
-    marker = {HOLD: "HOLD", QUERY: "QUERY", SAFE: "SAFE TO PAY"}[verdict.outcome]
+    marker = verdict.outcome
     lines.append(f"{marker}: {verdict.headline}")
     lines.append("")
 

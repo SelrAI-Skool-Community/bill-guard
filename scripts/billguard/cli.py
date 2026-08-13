@@ -25,14 +25,15 @@ from .ledger import Ledger
 from .model import (
     Channel, Document, LineItem, PaymentInstruction, to_cents,
 )
-from .verdict import HOLD, QUERY, SAFE, render_text
+from .verdict import HOLD, QUERY, SAFE, SETTLED, render_text
 
 EXIT_SAFE = 0
 EXIT_QUERY = 1
 EXIT_HOLD = 2
 EXIT_ERROR = 3
 
-_EXIT = {SAFE: EXIT_SAFE, QUERY: EXIT_QUERY, HOLD: EXIT_HOLD}
+_EXIT = {SAFE: EXIT_SAFE, QUERY: EXIT_QUERY, HOLD: EXIT_HOLD,
+         SETTLED: EXIT_SAFE}
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +114,8 @@ def document_from_dict(data: dict) -> Document:
         payment=payment,
         doc_type_words=data.get("doc_type_words", ""),
         raw_text=data.get("raw_text", ""),
+        text_source=data.get("text_source", "unknown"),
+        supplier_country=data.get("supplier_country"),
         artifacts=data.get("artifacts") or {},
         jurisdiction=data.get("jurisdiction", "AU"),
     )

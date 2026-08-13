@@ -13,7 +13,8 @@ from .model import (           # noqa: F401
     Channel, CheckResult, Document, FPRisk, LineItem, PaymentInstruction,
     Severity, Status, from_cents, to_cents,
 )
-from .verdict import HOLD, QUERY, SAFE, Verdict, decide, render_text  # noqa: F401
+from .verdict import (HOLD, QUERY, SAFE, SETTLED, Verdict, decide,  # noqa: F401
+                      render_text)
 from .lookups import (AbrClient, BsbClient, LookupClient, LookupResult,
                       SanctionsClient)  # noqa: F401
 
@@ -23,7 +24,7 @@ __all__ = [
     "Channel", "CheckResult", "Document", "FPRisk", "LineItem",
     "PaymentInstruction", "Severity", "Status", "Verdict",
     "decide", "render_text", "from_cents", "to_cents",
-    "HOLD", "QUERY", "SAFE", "assess",
+    "HOLD", "QUERY", "SAFE", "SETTLED", "assess",
     "AbrClient", "BsbClient", "LookupClient", "LookupResult", "SanctionsClient",
 ]
 
