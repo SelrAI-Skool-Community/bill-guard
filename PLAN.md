@@ -16,7 +16,7 @@ with everything green. One task should be one commit.
       against the register — done when: tests cover found, not-found, cancelled,
       and the offline `unknown` path, and the evidence names the register and
       the date it was asked.
-- [ ] T2b: Add check B03, supplier registration status AS AT THE INVOICE DATE,
+- [x] T2b: Add check B03, supplier registration status AS AT THE INVOICE DATE,
       not today — done when: a supplier cancelled after the invoice date passes,
       one cancelled before it fails, and a missing date returns unknown.
 - [ ] T2c: Add family E, document integrity: producer-tool drift against this
