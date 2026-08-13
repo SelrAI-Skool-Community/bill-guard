@@ -1,0 +1,28 @@
+# DECISIONS — autopilot-loop auto-pick log
+
+One block per resolved decision. A line beginning NEEDS_HUMAN flags a gate awaiting the operator.
+
+## D1: Use the existing test runner or create a separate kickoff checklist?
+- Picked: Use `python3 scripts/tests/run.py` as the verification gate.
+- Why: This is a code repository with a fast, deterministic 81-test suite and public self-test; a file-presence checklist would prove less.
+- Reversible? yes
+
+## D2: Mandatory extraction/network dependencies or a standard-library core with optional adapters?
+- Picked: Preserve the standard-library core and isolate free local/network capabilities behind optional adapters.
+- Why: This keeps the skill portable and zero-cost while explicit capability errors and `unknown` states prevent silent false assurance.
+- Reversible? yes
+
+## D3: Live registry tests or injected offline fixtures?
+- Picked: Use injectable clients and deterministic offline fixtures; reserve live calls for opt-in runtime use.
+- Why: Offline tests are reliable and privacy-preserving, while runtime adapters can still cache source-attributed observations with strict timeouts.
+- Reversible? yes
+
+## D4: Separate implementations per surface or one application contract with thin adapters?
+- Picked: Use one verification application contract with CLI, scheduled, agent-tool, and library adapters.
+- Why: A shared contract minimizes verdict drift and lets equivalence tests prove portability across every requested surface.
+- Reversible? yes
+
+## D5: How broad should autonomous feature edits be?
+- Picked: Allow source, tests, examples, packs, skill/docs, and Python packaging metadata only.
+- Why: Those prefixes cover the requested vertical slices while excluding loop machinery, infrastructure, credentials, payments, and unrelated systems.
+- Reversible? yes
