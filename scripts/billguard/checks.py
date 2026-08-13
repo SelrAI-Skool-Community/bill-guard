@@ -52,6 +52,15 @@ def run_all(doc: Document, ledger=None, ctx: dict | None = None) -> list[CheckRe
     return results
 
 
+def _lookup(ctx: dict, name: str, value: str):
+    """Run an injected lookup client; registry absence is never a pass."""
+    clients = ctx.get("lookup_clients") or {}
+    client = clients.get(name)
+    if client is None:
+        return None
+    return client.lookup(value)
+
+
 # ===========================================================================
 # FAMILY D -- payment safety.  The highest-yield family that exists.
 # ===========================================================================
@@ -217,6 +226,31 @@ def code_destination_agrees(doc: Document, ledger, ctx) -> list[CheckResult]:
     return out
 
 
+@check("D06", "BSB appears in the supplied directory", "payment")
+def bsb_directory_match(doc: Document, ledger, ctx) -> CheckResult:
+    if not doc.payment.bsb:
+        return not_applicable("D06", bsb_directory_match.title,
+                              "no BSB appears in the payment instruction")
+    result = _lookup(ctx, "bsb", doc.payment.bsb)
+    if result is None:
+        return unknown("D06", bsb_directory_match.title,
+                       "no BSB-directory client was supplied")
+    evidence = (f"{result.source}, observed {result.observed_at}; "
+                f"cache={result.cache}")
+    if result.status == "unknown":
+        return unknown("D06", bsb_directory_match.title,
+                       evidence + f"; lookup unavailable: {result.error}")
+    if result.status == "not_found":
+        return fail("D06", bsb_directory_match.title,
+                    Severity.QUERY, FPRisk.LOW,
+                    evidence + "; the directory did not return this BSB",
+                    lookup=result.to_dict())
+    institution = result.data.get("institution") or "unnamed institution"
+    return ok("D06", bsb_directory_match.title,
+              evidence + f"; listed institution={institution}",
+              lookup=result.to_dict())
+
+
 # ===========================================================================
 # FAMILY B -- business identity
 # ===========================================================================
@@ -269,6 +303,64 @@ def buyer_identity_present(doc: Document, ledger, ctx) -> CheckResult:
                 f"At ${from_cents(doc.total_cents)} this invoice must also "
                 f"identify the buyer by name or ABN, and it does not. It is "
                 f"not a valid tax invoice as it stands.")
+
+
+@check("B03", "Supplier ABN appears in the supplied ABR lookup", "identity")
+def abn_registry_match(doc: Document, ledger, ctx) -> CheckResult:
+    if not doc.supplier_abn:
+        return unknown("B03", abn_registry_match.title,
+                       "no ABN was extracted, so an identifier-safe lookup "
+                       "cannot run")
+    result = _lookup(ctx, "abr", doc.supplier_abn)
+    if result is None:
+        return unknown("B03", abn_registry_match.title,
+                       "no ABR lookup client was supplied")
+    evidence = (f"{result.source}, observed {result.observed_at}; "
+                f"cache={result.cache}")
+    if result.status == "unknown":
+        return unknown("B03", abn_registry_match.title,
+                       evidence + f"; lookup unavailable: {result.error}")
+    if result.status == "not_found":
+        return fail("B03", abn_registry_match.title,
+                    Severity.QUERY, FPRisk.LOW,
+                    evidence + "; the ABR lookup did not return this ABN",
+                    lookup=result.to_dict())
+    name = result.data.get("name") or "name not returned"
+    status = result.data.get("status") or "status not returned"
+    return ok("B03", abn_registry_match.title,
+              evidence + f"; entity={name}; ABN status={status}",
+              lookup=result.to_dict())
+
+
+# ===========================================================================
+# FAMILY E -- external watchlists
+# ===========================================================================
+
+@check("E01", "Supplier name has no exact supplied sanctions-list match",
+       "sanctions")
+def sanctions_exact_name(doc: Document, ledger, ctx) -> CheckResult:
+    if not doc.supplier_name:
+        return unknown("E01", sanctions_exact_name.title,
+                       "no supplier name was extracted")
+    result = _lookup(ctx, "sanctions", doc.supplier_name)
+    if result is None:
+        return unknown("E01", sanctions_exact_name.title,
+                       "no sanctions lookup client was supplied")
+    evidence = (f"{result.source}, observed {result.observed_at}; "
+                f"cache={result.cache}")
+    if result.status == "unknown":
+        return unknown("E01", sanctions_exact_name.title,
+                       evidence + f"; lookup unavailable: {result.error}")
+    if result.status == "found":
+        return fail(
+            "E01", sanctions_exact_name.title, Severity.HOLD, FPRisk.LOW,
+            evidence + "; an exact normalized-name match was returned; "
+            "a person must resolve identity before any payment decision",
+            lookup=result.to_dict())
+    return ok("E01", sanctions_exact_name.title,
+              evidence + "; no exact normalized-name match was returned; "
+              "this does not exclude aliases or spelling differences",
+              lookup=result.to_dict())
 
 
 # ===========================================================================
@@ -702,3 +794,34 @@ def wants_a_phone_call(doc: Document, ledger, ctx) -> CheckResult:
                 "only a number to call. A real invoice wants to be paid. "
                 "This shape exists to get you on the phone, where the caller "
                 "asks for remote access to your computer.")
+
+
+# ===========================================================================
+# FAMILY I -- actionable timing
+# ===========================================================================
+
+@check("I01", "Payment due date is present and actionable", "deadline")
+def payment_due_date(doc: Document, ledger, ctx) -> CheckResult:
+    if doc.balance_due_cents is not None and doc.balance_due_cents <= 0:
+        return not_applicable("I01", payment_due_date.title,
+                              "the document has no outstanding balance")
+    if not doc.due_date:
+        return unknown("I01", payment_due_date.title,
+                       "no due date was extracted")
+    try:
+        due = _dt.date.fromisoformat(doc.due_date[:10])
+        raw_as_of = ctx.get("as_of")
+        as_of = (_dt.date.fromisoformat(str(raw_as_of)[:10]) if raw_as_of
+                 else _dt.datetime.now(_dt.timezone.utc).date())
+    except (TypeError, ValueError):
+        return unknown("I01", payment_due_date.title,
+                       "due date or as-of date is not valid ISO 8601")
+    days = (due - as_of).days
+    if days < 0:
+        return fail("I01", payment_due_date.title,
+                    Severity.QUERY, FPRisk.NONE,
+                    f"due {due.isoformat()}, {-days} day(s) overdue as of "
+                    f"{as_of.isoformat()}", days_until_due=days)
+    return ok("I01", payment_due_date.title,
+              f"due {due.isoformat()}, {days} day(s) remaining as of "
+              f"{as_of.isoformat()}", days_until_due=days)
