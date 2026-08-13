@@ -43,7 +43,7 @@ with everything green. One task should be one commit.
 - [x] T5a: Family I clocks: due-date arithmetic with an injectable "as at" date —
       done when: upcoming, due today, overdue and missing-date all resolve, and
       no legal advice is asserted.
-- [ ] T5b: Family I: business-day deadline arithmetic with a jurisdiction table —
+- [x] T5b: Family I: business-day deadline arithmetic with a jurisdiction table —
       done when: a payment claim's reply deadline is computed for two states and
       the source of each rule is named in the evidence.
 

@@ -1022,6 +1022,50 @@ def wants_a_phone_call(doc: Document, ledger, ctx) -> CheckResult:
 # FAMILY I -- actionable timing
 # ===========================================================================
 
+_PAYMENT_SCHEDULE_RULES = {
+    "NSW": {
+        "business_days": 10,
+        "year_end_exclusions": ((12, 27, 31),),
+        "source": (
+            "NSW Building and Construction Industry Security of Payment "
+            "Act 1999, s 14(4)"
+        ),
+        "source_url": (
+            "https://legislation.nsw.gov.au/view/whole/html/inforce/current/"
+            "act-1999-046#sec.14"
+        ),
+    },
+    "QLD": {
+        "business_days": 15,
+        "year_end_exclusions": ((12, 22, 24), (12, 27, 31),
+                                (1, 2, 10)),
+        "source": (
+            "Queensland Building Industry Fairness (Security of Payment) "
+            "Act 2017, s 76(1)"
+        ),
+        "source_url": (
+            "https://www.legislation.qld.gov.au/view/html/inforce/current/"
+            "act-2017-043#sec.76"
+        ),
+    },
+}
+
+
+def _add_business_days(start: _dt.date, days: int,
+                       holidays: set[_dt.date], exclusions: tuple) -> _dt.date:
+    """Count weekdays after ``start``; supplied public holidays do not count."""
+    current = start
+    remaining = days
+    while remaining:
+        current += _dt.timedelta(days=1)
+        excluded = any(current.month == month and first <= current.day <= last
+                       for month, first, last in exclusions)
+        if (current.weekday() < 5 and current not in holidays and
+                not excluded):
+            remaining -= 1
+    return current
+
+
 @check("I01", "Payment due date is present and actionable", "deadline")
 def payment_due_date(doc: Document, ledger, ctx) -> CheckResult:
     if doc.balance_due_cents is not None and doc.balance_due_cents <= 0:
@@ -1059,3 +1103,60 @@ def payment_due_date(doc: Document, ledger, ctx) -> CheckResult:
               "advice",
               timing_state="upcoming", days_until_due=days,
               due_date=due.isoformat(), as_at=as_of.isoformat())
+
+
+@check("I02", "Payment claim reply deadline is actionable", "deadline")
+def payment_claim_reply_deadline(doc: Document, ledger, ctx) -> CheckResult:
+    claim = doc.artifacts.get("payment_claim")
+    if claim is None:
+        return not_applicable(
+            "I02", payment_claim_reply_deadline.title,
+            "document is not identified as a construction payment claim")
+    if not isinstance(claim, dict):
+        return unknown("I02", payment_claim_reply_deadline.title,
+                       "payment claim metadata is not an object")
+
+    state = str(claim.get("state") or "").strip().upper()
+    rule = _PAYMENT_SCHEDULE_RULES.get(state)
+    if rule is None:
+        return unknown("I02", payment_claim_reply_deadline.title,
+                       f"no payment-schedule rule is configured for {state or 'missing state'}")
+    try:
+        served = _dt.date.fromisoformat(str(claim.get("served_date"))[:10])
+        raw_as_of = ctx.get("as_of")
+        as_of = (_dt.date.fromisoformat(str(raw_as_of)[:10]) if raw_as_of
+                 else _dt.datetime.now(_dt.timezone.utc).date())
+        raw_holidays = (ctx.get("public_holidays") or {}).get(state, [])
+        holidays = {_dt.date.fromisoformat(str(value)[:10])
+                    for value in raw_holidays}
+    except (AttributeError, TypeError, ValueError):
+        return unknown("I02", payment_claim_reply_deadline.title,
+                       "served date, as-of date, or public holiday is not valid ISO 8601")
+
+    deadline = _add_business_days(served, rule["business_days"], holidays,
+                                  rule["year_end_exclusions"])
+    days = (deadline - as_of).days
+    timing_state = ("overdue" if days < 0 else
+                    "due_today" if days == 0 else "upcoming")
+    evidence = (
+        f"{state} statutory outer reply date {deadline.isoformat()} "
+        f"({rule['business_days']} business days after service on "
+        f"{served.isoformat()}), under {rule['source']}; an earlier period "
+        "in the construction contract may control; timing reminder only, "
+        "not legal advice"
+    )
+    detail = {
+        "timing_state": timing_state,
+        "days_until_deadline": days,
+        "served_date": served.isoformat(),
+        "deadline_date": deadline.isoformat(),
+        "as_at": as_of.isoformat(),
+        "jurisdiction": state,
+        "business_days": rule["business_days"],
+        "source": rule["source"],
+        "source_url": rule["source_url"],
+    }
+    if days < 0:
+        return fail("I02", payment_claim_reply_deadline.title,
+                    Severity.QUERY, FPRisk.NONE, evidence, **detail)
+    return ok("I02", payment_claim_reply_deadline.title, evidence, **detail)
