@@ -146,6 +146,8 @@ class AbrClient(LookupClient):
         return "found", {"abn": abn,
                          "name": obj.get("EntityName") or obj.get("MainName"),
                          "status": obj.get("AbnStatus"),
+                         "status_effective_from":
+                             obj.get("AbnStatusEffectiveFrom") or None,
                          "gst_from": obj.get("Gst") or None}
 
 

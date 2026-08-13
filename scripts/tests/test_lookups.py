@@ -23,7 +23,9 @@ class FakeTransport:
 def abr_success_is_attributed_and_cached_fresh():
     ledger = Ledger(":memory:")
     fake = FakeTransport({"Abn": "51824753556", "EntityName": "Example Pty Ltd",
-                          "AbnStatus": "Active", "Gst": "2010-01-01"})
+                          "AbnStatus": "Active",
+                          "AbnStatusEffectiveFrom": "2009-07-01",
+                          "Gst": "2010-01-01"})
     client = AbrClient(ledger, guid="free-guid", transport=fake, timeout=1.25,
                        now=lambda: NOW)
     first = client.lookup("51 824 753 556")
@@ -31,6 +33,7 @@ def abr_success_is_attributed_and_cached_fresh():
     eq(first.status, "found")
     eq(first.source, "Australian Business Register ABN Lookup")
     eq(first.data["name"], "Example Pty Ltd")
+    eq(first.data["status_effective_from"], "2009-07-01")
     eq(second.cache, "fresh")
     eq(len(fake.calls), 1)
     eq(fake.calls[0][1], 1.25)

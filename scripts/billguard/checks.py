@@ -347,7 +347,8 @@ def buyer_identity_present(doc: Document, ledger, ctx) -> CheckResult:
                 f"GST credit to stand up.")
 
 
-@check("B03", "Supplier ABN appears in the supplied ABR lookup", "identity")
+@check("B03", "Supplier registration was active on the invoice date",
+       "identity")
 def abn_registry_match(doc: Document, ledger, ctx) -> CheckResult:
     if not doc.supplier_abn:
         return unknown("B03", abn_registry_match.title,
@@ -368,9 +369,58 @@ def abn_registry_match(doc: Document, ledger, ctx) -> CheckResult:
                     evidence + "; the ABR lookup did not return this ABN",
                     lookup=result.to_dict())
     name = result.data.get("name") or "name not returned"
-    status = result.data.get("status") or "status not returned"
+    status = str(result.data.get("status") or "").strip()
+    if not doc.issue_date:
+        return unknown("B03", abn_registry_match.title,
+                       evidence + "; no invoice date was extracted, so the "
+                       "supplier's status on that date cannot be determined",
+                       lookup=result.to_dict())
+    try:
+        invoice_date = _dt.date.fromisoformat(doc.issue_date[:10])
+    except (TypeError, ValueError):
+        return unknown("B03", abn_registry_match.title,
+                       evidence + f"; invoice date {doc.issue_date!r} is not "
+                       "a valid ISO date",
+                       lookup=result.to_dict())
+
+    if status.casefold() in {"cancelled", "canceled"}:
+        effective_value = result.data.get("status_effective_from")
+        if not effective_value:
+            return unknown(
+                "B03", abn_registry_match.title,
+                evidence + "; ABN is cancelled but the register did not "
+                "return its cancellation effective date",
+                lookup=result.to_dict())
+        try:
+            cancelled_from = _dt.date.fromisoformat(str(effective_value)[:10])
+        except ValueError:
+            return unknown(
+                "B03", abn_registry_match.title,
+                evidence + f"; cancellation effective date "
+                f"{effective_value!r} is not a valid ISO date",
+                lookup=result.to_dict())
+        dated_evidence = (
+            evidence + f"; entity={name}; ABN status=Cancelled effective "
+            f"{cancelled_from.isoformat()}; invoice date="
+            f"{invoice_date.isoformat()}")
+        if cancelled_from <= invoice_date:
+            return fail("B03", abn_registry_match.title,
+                        Severity.HOLD, FPRisk.LOW,
+                        dated_evidence + "; supplier was not active on the "
+                        "invoice date",
+                        lookup=result.to_dict())
+        return ok("B03", abn_registry_match.title,
+                  dated_evidence + "; cancellation occurred after the "
+                  "invoice date",
+                  lookup=result.to_dict())
+    if status.casefold() != "active":
+        return unknown("B03", abn_registry_match.title,
+                       evidence + "; the register did not return a recognised "
+                       f"status (status={status or 'missing'})",
+                       lookup=result.to_dict())
     return ok("B03", abn_registry_match.title,
-              evidence + f"; entity={name}; ABN status={status}",
+              evidence + f"; entity={name}; ABN status=Active; invoice date="
+              f"{invoice_date.isoformat()}",
               lookup=result.to_dict())
 
 

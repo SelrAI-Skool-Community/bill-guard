@@ -123,6 +123,49 @@ def b01_is_unknown_when_register_status_is_unrecognised():
 
 
 @test
+def b03_passes_when_supplier_was_cancelled_after_invoice_date():
+    result = _by_id(run_all(_doc(issue_date="2026-08-01"), None, {
+        "lookup_clients": {"abr": FakeLookup(_result(
+            "found", "ABR fixture", {"status": "Cancelled",
+                                      "status_effective_from": "2026-08-02"}))}
+    }), "B03")
+    eq(result.status, Status.PASS)
+    true("cancellation occurred after the invoice date" in result.evidence)
+    true("observed 2026-08-13" in result.evidence)
+
+
+@test
+def b03_holds_when_supplier_was_cancelled_before_invoice_date():
+    result = _by_id(run_all(_doc(issue_date="2026-08-01"), None, {
+        "lookup_clients": {"abr": FakeLookup(_result(
+            "found", "ABR fixture", {"status": "Cancelled",
+                                      "status_effective_from": "2026-07-31"}))}
+    }), "B03")
+    eq(result.status, Status.FAIL)
+    eq(result.severity.value, "hold")
+    true("supplier was not active on the invoice date" in result.evidence)
+
+
+@test
+def b03_is_unknown_without_invoice_date():
+    result = _by_id(run_all(_doc(issue_date=None), None, {
+        "lookup_clients": {"abr": FakeLookup(_result(
+            "found", "ABR fixture", {"status": "Active"}))}
+    }), "B03")
+    eq(result.status, Status.UNKNOWN)
+    true("no invoice date" in result.evidence)
+
+
+@test
+def b03_is_unknown_when_cancelled_without_an_effective_date():
+    result = _by_id(run_all(_doc(), None, {"lookup_clients": {
+        "abr": FakeLookup(_result("found", "ABR fixture",
+                                  {"status": "Cancelled"}))}}), "B03")
+    eq(result.status, Status.UNKNOWN)
+    true("did not return its cancellation effective date" in result.evidence)
+
+
+@test
 def negative_registry_answers_fail_with_false_positive_limits():
     results = run_all(_doc(), None, {"lookup_clients": {
         "abr": FakeLookup(_result("not_found", "ABR fixture")),
