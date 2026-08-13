@@ -1,13 +1,17 @@
 """Reading real invoices, the way a business owner actually has them."""
 
+from contextlib import redirect_stdout
+from io import StringIO
+import json
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from harness import test, eq, true, false, main
 from billguard import intake
+from billguard import cli
 from billguard.model import Channel
-from billguard.qr import DecodedCode
+from billguard.qr import DecodedCode, PaymentPayload
 
 FIXTURES = Path(__file__).resolve().parents[2] / "examples" / "intake"
 
@@ -297,6 +301,35 @@ def an_image_is_fed_directly_to_the_code_decoder():
         eq(codes[0]["page"], 0)
     finally:
         os.unlink(image_path)
+
+
+@test
+def two_codes_attach_as_artifacts_and_hold_through_the_cli():
+    """A file check must exercise D04 without prepared JSON artifacts."""
+    image_path = FIXTURES / "two-payment-codes.png"
+    decoded = [
+        DecodedCode("fixture-code-one", page=0, decoder="offline-fixture"),
+        DecodedCode("fixture-code-two", page=0, decoder="offline-fixture"),
+    ]
+    parsed = [
+        PaymentPayload("emvco", destination="payid:first@example.test"),
+        PaymentPayload("emvco", destination="payid:second@example.test"),
+    ]
+    output = StringIO()
+    with patch.object(intake, "read_file", return_value=(CLEAN, [], {
+            "channel": Channel.PHOTO,
+    })), patch("billguard.qr.decode_image", return_value=decoded), \
+            patch("billguard.qr.parse_payload", side_effect=parsed), \
+            redirect_stdout(output):
+        exit_code = cli.main(["check", str(image_path), "--json"])
+
+    verdict = json.loads(output.getvalue())
+    d04 = next(check for check in verdict["checks"]
+               if check["check_id"] == "D04")
+    eq(exit_code, cli.EXIT_HOLD)
+    eq(verdict["outcome"], "HOLD")
+    eq(d04["status"], "fail")
+    true("2 separate payment codes" in d04["evidence"])
 
 
 @test

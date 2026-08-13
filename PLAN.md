@@ -36,7 +36,7 @@ with everything green. One task should be one commit.
       page not just the first — done when: a fixture hiding a code on the last
       page is still found.
 
-- [ ] T4a: Attach decoded codes to the Document as artifacts during intake so
+- [x] T4a: Attach decoded codes to the Document as artifacts during intake so
       D04 and D05 fire from real files — done when: a two-code fixture holds
       end to end through the CLI.
 

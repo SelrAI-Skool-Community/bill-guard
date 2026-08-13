@@ -1,0 +1,3 @@
+Offline decoder fixture. Tests inject the two decoded payloads at the image
+adapter boundary so the standard-library suite does not require OpenCV,
+Pillow, zbar, or a platform-specific QR decoder.
