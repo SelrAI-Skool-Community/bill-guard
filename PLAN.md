@@ -40,7 +40,7 @@ with everything green. One task should be one commit.
       D04 and D05 fire from real files — done when: a two-code fixture holds
       end to end through the CLI.
 
-- [ ] T5a: Family I clocks: due-date arithmetic with an injectable "as at" date —
+- [x] T5a: Family I clocks: due-date arithmetic with an injectable "as at" date —
       done when: upcoming, due today, overdue and missing-date all resolve, and
       no legal advice is asserted.
 - [ ] T5b: Family I: business-day deadline arithmetic with a jurisdiction table —

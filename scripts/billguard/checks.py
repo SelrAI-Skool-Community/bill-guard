@@ -1043,7 +1043,19 @@ def payment_due_date(doc: Document, ledger, ctx) -> CheckResult:
         return fail("I01", payment_due_date.title,
                     Severity.QUERY, FPRisk.NONE,
                     f"due {due.isoformat()}, {-days} day(s) overdue as of "
-                    f"{as_of.isoformat()}", days_until_due=days)
+                    f"{as_of.isoformat()}; timing reminder only, not legal "
+                    "advice",
+                    timing_state="overdue", days_until_due=days,
+                    due_date=due.isoformat(), as_at=as_of.isoformat())
+    if days == 0:
+        return ok("I01", payment_due_date.title,
+                  f"due today, {due.isoformat()}, as of {as_of.isoformat()}; "
+                  "timing reminder only, not legal advice",
+                  timing_state="due_today", days_until_due=0,
+                  due_date=due.isoformat(), as_at=as_of.isoformat())
     return ok("I01", payment_due_date.title,
-              f"due {due.isoformat()}, {days} day(s) remaining as of "
-              f"{as_of.isoformat()}", days_until_due=days)
+              f"upcoming: due {due.isoformat()}, {days} day(s) remaining as "
+              f"of {as_of.isoformat()}; timing reminder only, not legal "
+              "advice",
+              timing_state="upcoming", days_until_due=days,
+              due_date=due.isoformat(), as_at=as_of.isoformat())
