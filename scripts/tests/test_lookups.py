@@ -82,6 +82,19 @@ def stale_cache_does_not_turn_transport_failure_into_success():
 
 
 @test
+def malformed_cache_is_ignored_and_transport_failure_is_unknown():
+    ledger = Ledger(":memory:")
+    ledger.cache_registry("bsb:123456", "not-a-date", {"status": "found"})
+    result = BsbClient(
+        ledger, endpoint="https://directory.example/bsb",
+        transport=FakeTransport(error=TimeoutError("late")),
+        now=lambda: NOW).lookup("123456")
+    eq(result.status, "unknown")
+    eq(result.cache, "miss")
+    true("TimeoutError" in result.error)
+
+
+@test
 def bsb_not_found_and_sanctions_exact_match_are_deterministic():
     ledger = Ledger(":memory:")
     bsb = BsbClient(ledger, endpoint="https://directory.example/bsb",

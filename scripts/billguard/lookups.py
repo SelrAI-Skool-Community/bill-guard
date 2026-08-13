@@ -63,10 +63,17 @@ class LookupClient(ABC):
                                 error=f"{type(exc).__name__}: {exc}")
         cache_key = f"{self.namespace}:{normalized}"
         cached = self.ledger.registry_answers(cache_key)
+        valid_cached = None
         if cached:
-            age = at - _parse_datetime(cached[0]["asked_at"])
-            if timedelta(0) <= age <= self.max_age:
-                return _result_from_cache(cached[0], "fresh")
+            try:
+                age = at - _parse_datetime(cached[0]["asked_at"])
+                valid_cached = _result_from_cache(cached[0], "stale")
+                if timedelta(0) <= age <= self.max_age:
+                    return _result_from_cache(cached[0], "fresh")
+            except (AttributeError, KeyError, TypeError, ValueError):
+                # A damaged local cache must never turn a lookup into a crash
+                # or be presented as registry evidence.
+                valid_cached = None
         try:
             payload = self.transport(self.url(normalized), self.timeout)
             status, data = self.parse(payload, normalized)
@@ -79,7 +86,7 @@ class LookupClient(ABC):
         except (AttributeError, TimeoutError, urllib.error.URLError, UnicodeError,
                 json.JSONDecodeError, ValueError, KeyError, TypeError) as exc:
             return LookupResult("unknown", self.source, at.isoformat(), {},
-                                "stale" if cached else "miss",
+                                "stale" if valid_cached else "miss",
                                 f"{type(exc).__name__}: {exc}")
 
     def normalize(self, value: str) -> str:
