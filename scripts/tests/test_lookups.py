@@ -112,6 +112,43 @@ def invalid_json_cache_is_ignored_and_fresh_response_is_used():
 
 
 @test
+def structurally_invalid_cache_is_ignored():
+    ledger = Ledger(":memory:")
+    ledger.cache_registry("bsb:123456", NOW.isoformat(), {
+        "status": "found",
+        "source": "Australian Payments Network BSB directory",
+        "observed_at": NOW.isoformat(),
+        "data": 42,
+    })
+    fake = FakeTransport({"bsb": "123456", "institution": "Bank"})
+    result = BsbClient(
+        ledger, endpoint="https://directory.example/bsb", transport=fake,
+        now=lambda: NOW).lookup("123456")
+    eq(result.status, "found")
+    eq(result.data["institution"], "Bank")
+    eq(result.cache, "miss")
+    eq(len(fake.calls), 1)
+
+
+@test
+def future_dated_cache_is_not_used_as_evidence():
+    ledger = Ledger(":memory:")
+    future = NOW + timedelta(days=1)
+    ledger.cache_registry("bsb:123456", future.isoformat(), {
+        "status": "found",
+        "source": "Australian Payments Network BSB directory",
+        "observed_at": future.isoformat(),
+        "data": {"bsb": "123456", "institution": "Future Bank"},
+    })
+    result = BsbClient(
+        ledger, endpoint="https://directory.example/bsb",
+        transport=FakeTransport(error=TimeoutError("late")),
+        now=lambda: NOW).lookup("123456")
+    eq(result.status, "unknown")
+    eq(result.cache, "miss")
+
+
+@test
 def bsb_not_found_and_sanctions_exact_match_are_deterministic():
     ledger = Ledger(":memory:")
     bsb = BsbClient(ledger, endpoint="https://directory.example/bsb",
