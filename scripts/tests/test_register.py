@@ -105,6 +105,15 @@ def b01_is_unknown_when_offline_lookup_cannot_answer():
 
 
 @test
+def b01_is_unknown_when_register_status_is_unrecognised():
+    result = _by_id(run_all(_doc(), None, {"lookup_clients": {
+        "abr": FakeLookup(_result("found", "ABR fixture",
+                                  {"status": "Suspended"}))}}), "B01")
+    eq(result.status, Status.UNKNOWN)
+    true("status=Suspended" in result.evidence)
+
+
+@test
 def negative_registry_answers_fail_with_false_positive_limits():
     results = run_all(_doc(), None, {"lookup_clients": {
         "abr": FakeLookup(_result("not_found", "ABR fixture")),
