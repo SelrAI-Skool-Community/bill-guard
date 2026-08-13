@@ -32,7 +32,7 @@ with everything green. One task should be one commit.
 - [x] T3b: Intake: PDF text-layer extraction via pdftotext, with a named failure
       when there is no text layer — done when: a text PDF extracts and a scanned
       one reports a capability gap rather than an empty pass.
-- [ ] T3c: Intake: image and PDF page rendering feeding the code decoder, every
+- [x] T3c: Intake: image and PDF page rendering feeding the code decoder, every
       page not just the first — done when: a fixture hiding a code on the last
       page is still found.
 

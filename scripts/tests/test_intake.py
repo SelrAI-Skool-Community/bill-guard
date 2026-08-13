@@ -7,6 +7,7 @@ from unittest.mock import patch
 from harness import test, eq, true, false, main
 from billguard import intake
 from billguard.model import Channel
+from billguard.qr import DecodedCode
 
 FIXTURES = Path(__file__).resolve().parents[2] / "examples" / "intake"
 
@@ -221,6 +222,94 @@ def a_broken_pdf_is_not_misreported_as_a_scan():
     eq(text, "")
     true(any(g.startswith(intake.PDF_EXTRACTION_FAILED) for g in gaps))
     false(any(g.startswith(intake.PDF_TEXT_LAYER_MISSING) for g in gaps))
+
+
+@test
+def pdf_page_rendering_keeps_numeric_page_order():
+    import os
+
+    def render_pages(command, **kwargs):
+        prefix = command[-1]
+        for number in (10, 2, 1):
+            open(f"{prefix}-{number}.png", "wb").close()
+        return CompletedProcess(command, 0, stdout=b"", stderr=b"")
+
+    with patch.object(intake.shutil, "which", return_value="/bin/pdftoppm"), \
+            patch.object(intake.subprocess, "run", side_effect=render_pages):
+        pages, tmpdir = intake._render_pdf_pages("invoice.pdf")
+    try:
+        eq([os.path.basename(path) for path, _ in pages],
+           ["page-1.png", "page-2.png", "page-10.png"])
+        eq([page for _, page in pages], [0, 1, 2])
+    finally:
+        if tmpdir:
+            intake.shutil.rmtree(tmpdir)
+
+
+@test
+def a_code_hidden_on_the_last_pdf_page_is_found():
+    import tempfile, os
+    from billguard import qr
+
+    tempdir = tempfile.mkdtemp(prefix="billguard-test-pages-")
+    pdf_fd, pdf_path = tempfile.mkstemp(suffix=".pdf")
+    os.close(pdf_fd)
+    pages = []
+    for page in range(3):
+        image_path = os.path.join(tempdir, f"page-{page + 1}.png")
+        open(image_path, "wb").close()
+        pages.append((image_path, page))
+
+    def decode_only_last(path, page=0):
+        if page == 2:
+            return [DecodedCode("https://pay.example/final", page=page,
+                                decoder="fixture")]
+        return []
+
+    try:
+        with patch.object(intake, "_render_pdf_pages",
+                          return_value=(pages, None)), \
+                patch.object(qr, "decode_image", side_effect=decode_only_last):
+            codes = intake._decode_codes(pdf_path)
+        eq(len(codes), 1)
+        eq(codes[0]["page"], 2)
+        eq(codes[0]["payload"], "https://pay.example/final")
+        eq(codes[0]["scheme"], "url")
+    finally:
+        os.unlink(pdf_path)
+        intake.shutil.rmtree(tempdir)
+
+
+@test
+def an_image_is_fed_directly_to_the_code_decoder():
+    import tempfile, os
+    from billguard import qr
+
+    image_fd, image_path = tempfile.mkstemp(suffix=".png")
+    os.close(image_fd)
+    decoded = DecodedCode("plain fixture payload", page=0,
+                          decoder="fixture")
+    try:
+        with patch.object(qr, "decode_image", return_value=[decoded]) as decode:
+            codes = intake._decode_codes(image_path)
+        eq(decode.call_args.args, (image_path, 0))
+        eq(codes[0]["payload"], "plain fixture payload")
+        eq(codes[0]["page"], 0)
+    finally:
+        os.unlink(image_path)
+
+
+@test
+def failed_pdf_rendering_returns_no_partial_pages():
+    def failed_render(command, **kwargs):
+        open(f"{command[-1]}-1.png", "wb").close()
+        return CompletedProcess(command, 1, stdout=b"", stderr=b"bad pdf")
+
+    with patch.object(intake.shutil, "which", return_value="/bin/pdftoppm"), \
+            patch.object(intake.subprocess, "run", side_effect=failed_render):
+        pages, tmpdir = intake._render_pdf_pages("broken.pdf")
+    eq(pages, [])
+    eq(tmpdir, None)
 
 
 if __name__ == "__main__":

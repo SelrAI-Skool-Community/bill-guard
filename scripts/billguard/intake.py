@@ -625,12 +625,23 @@ def _render_pdf_pages(path: str) -> tuple[list, str | None]:
     import tempfile
     tmpdir = tempfile.mkdtemp(prefix="billguard-")
     try:
-        subprocess.run([exe, "-r", "300", "-png", path,
-                        os.path.join(tmpdir, "page")],
-                       capture_output=True, timeout=120)
+        rendered = subprocess.run(
+            [exe, "-r", "300", "-png", path,
+             os.path.join(tmpdir, "page")],
+            capture_output=True, timeout=120)
     except Exception:
         shutil.rmtree(tmpdir, ignore_errors=True)
         return [], None
-    pages = sorted(os.path.join(tmpdir, f) for f in os.listdir(tmpdir)
-                   if f.endswith(".png"))
+    if rendered.returncode != 0:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        return [], None
+
+    def page_number(filename: str) -> int:
+        match = re.search(r"-(\d+)\.png$", filename)
+        return int(match.group(1)) if match else 0
+
+    pages = sorted(
+        (os.path.join(tmpdir, f) for f in os.listdir(tmpdir)
+         if f.lower().endswith(".png")),
+        key=lambda filename: page_number(os.path.basename(filename)))
     return [(p, i) for i, p in enumerate(pages)], tmpdir
