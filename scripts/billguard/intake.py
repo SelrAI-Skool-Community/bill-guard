@@ -28,9 +28,17 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from enum import Enum
 
 from . import au
 from .model import Channel, Document, LineItem, PaymentInstruction, to_cents
+
+
+class IntakeOutcome(str, Enum):
+    """Mutually exclusive result of normalising a block of text."""
+    INVOICE = "invoice"
+    PARTIAL = "partial"
+    NOT_INVOICE = "not_invoice"
 
 
 @dataclass
@@ -68,6 +76,25 @@ class Extraction:
         if d.doc_type_words:
             signals += 2
         return signals >= 2
+
+    @property
+    def outcome(self) -> IntakeOutcome:
+        """Classify readable text without turning fragments into verdicts."""
+        d = self.document
+        has_financial_detail = any((
+            d.total_cents is not None, d.balance_due_cents is not None,
+            not d.payment.is_empty(),
+        ))
+        if self.looks_like_an_invoice and has_financial_detail:
+            return IntakeOutcome.INVOICE
+        has_extracted_field = any((
+            d.invoice_number, d.supplier_abn, d.issue_date, d.due_date,
+            d.total_cents is not None, d.balance_due_cents is not None,
+            not d.payment.is_empty(), d.doc_type_words,
+        ))
+        if self.text_chars > 0 and has_extracted_field:
+            return IntakeOutcome.PARTIAL
+        return IntakeOutcome.NOT_INVOICE
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +494,16 @@ def from_text(text: str, *, channel: Channel = Channel.PASTE,
     fields, conf, gaps = extract_fields(text)
     payment, pay_gaps = extract_payment(text)
     gaps.extend(pay_gaps)
+    if payment.bsb:
+        conf["payment.bsb"] = payment.confidence
+    if payment.account_number:
+        conf["payment.account_number"] = payment.confidence
+    if payment.bpay_biller:
+        conf["payment.bpay_biller"] = payment.confidence
+    if payment.bpay_reference:
+        conf["payment.bpay_reference"] = payment.confidence
+    if payment.iban:
+        conf["payment.iban"] = payment.confidence
 
     if supplier_name is None:
         supplier_name = _guess_supplier_name(text)

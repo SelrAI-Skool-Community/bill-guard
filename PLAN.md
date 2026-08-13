@@ -26,7 +26,7 @@ with everything green. One task should be one commit.
       code payload — done when: text and code agreeing passes, disagreeing holds,
       and a code with no destination returns unknown.
 
-- [ ] T3a: Intake: plain text and pasted-block normaliser producing a Document
+- [x] T3a: Intake: plain text and pasted-block normaliser producing a Document
       with per-field confidence — done when: fixtures for a clean invoice, a
       truncated one, and rubbish each land in exactly one outcome.
 - [ ] T3b: Intake: PDF text-layer extraction via pdftotext, with a named failure

@@ -1,8 +1,12 @@
 """Reading real invoices, the way a business owner actually has them."""
 
+from pathlib import Path
+
 from harness import test, eq, true, false, main
 from billguard import intake
 from billguard.model import Channel
+
+FIXTURES = Path(__file__).resolve().parents[2] / "examples" / "intake"
 
 CLEAN = """Tiles by Morrissey
 ABN 98 273 029 681
@@ -97,6 +101,33 @@ def junk_is_not_an_invoice():
 @test
 def a_real_invoice_is_recognised_as_one():
     true(intake.from_text(CLEAN).looks_like_an_invoice)
+
+
+@test
+def text_fixtures_have_exactly_one_outcome_each():
+    expected = {
+        "clean.txt": intake.IntakeOutcome.INVOICE,
+        "truncated.txt": intake.IntakeOutcome.PARTIAL,
+        "rubbish.txt": intake.IntakeOutcome.NOT_INVOICE,
+    }
+    for name, outcome in expected.items():
+        ex = intake.from_file(str(FIXTURES / name))
+        eq(ex.outcome, outcome, name)
+        eq(sum(ex.outcome is candidate for candidate in intake.IntakeOutcome),
+           1, f"{name} must land in exactly one outcome")
+
+
+@test
+def every_clean_fixture_field_has_confidence():
+    ex = intake.from_file(str(FIXTURES / "clean.txt"))
+    expected = {
+        "supplier_name", "supplier_abn", "invoice_number", "issue_date",
+        "due_date", "currency", "subtotal_cents", "tax_cents",
+        "total_cents", "balance_due_cents", "payment.bsb",
+        "payment.account_number",
+    }
+    eq(set(ex.confidence), expected)
+    true(all(0 < score <= 1 for score in ex.confidence.values()))
 
 
 @test
