@@ -1,6 +1,8 @@
 """Reading real invoices, the way a business owner actually has them."""
 
 from pathlib import Path
+from subprocess import CompletedProcess
+from unittest.mock import patch
 
 from harness import test, eq, true, false, main
 from billguard import intake
@@ -162,6 +164,63 @@ def a_photo_reports_the_capability_gap_not_an_empty_pass():
         eq(meta.get("channel"), Channel.PHOTO)
     finally:
         os.unlink(path)
+
+
+@test
+def a_pdf_text_layer_is_extracted_via_pdftotext():
+    completed = CompletedProcess([], 0, stdout=CLEAN.encode(), stderr=b"")
+    with patch.object(intake, "_pdftotext_path", return_value="/bin/pdftotext"), \
+            patch.object(intake.subprocess, "run", return_value=completed) as run:
+        text, gaps = intake.text_from_pdf("invoice.pdf")
+
+    eq(text, CLEAN)
+    eq(gaps, [])
+    eq(run.call_args.args[0],
+       ["/bin/pdftotext", "-layout", "-q", "invoice.pdf", "-"])
+    eq(run.call_args.kwargs["timeout"], 60)
+
+
+@test
+def a_text_pdf_normalises_to_a_document_through_file_intake():
+    import tempfile, os
+    fd, path = tempfile.mkstemp(suffix=".pdf")
+    os.close(fd)
+    completed = CompletedProcess([], 0, stdout=CLEAN.encode(), stderr=b"")
+    try:
+        with patch.object(intake, "_pdftotext_path",
+                          return_value="/bin/pdftotext"), \
+                patch.object(intake.subprocess, "run", return_value=completed), \
+                patch.object(intake, "_decode_codes", return_value=[]):
+            ex = intake.from_file(path)
+        eq(ex.outcome, intake.IntakeOutcome.INVOICE)
+        eq(ex.document.invoice_number, "INV-19092")
+        eq(ex.document.channel, Channel.UPLOAD)
+        eq(ex.source_path, path)
+    finally:
+        os.unlink(path)
+
+
+@test
+def a_scanned_pdf_names_the_missing_text_layer():
+    completed = CompletedProcess([], 0, stdout=b"\f", stderr=b"")
+    with patch.object(intake, "_pdftotext_path", return_value="/bin/pdftotext"), \
+            patch.object(intake.subprocess, "run", return_value=completed):
+        text, gaps = intake.text_from_pdf("scan.pdf")
+
+    eq(text, "\f")
+    true(any(g.startswith(intake.PDF_TEXT_LAYER_MISSING) for g in gaps))
+
+
+@test
+def a_broken_pdf_is_not_misreported_as_a_scan():
+    completed = CompletedProcess([], 1, stdout=b"", stderr=b"syntax error")
+    with patch.object(intake, "_pdftotext_path", return_value="/bin/pdftotext"), \
+            patch.object(intake.subprocess, "run", return_value=completed):
+        text, gaps = intake.text_from_pdf("broken.pdf")
+
+    eq(text, "")
+    true(any(g.startswith(intake.PDF_EXTRACTION_FAILED) for g in gaps))
+    false(any(g.startswith(intake.PDF_TEXT_LAYER_MISSING) for g in gaps))
 
 
 if __name__ == "__main__":

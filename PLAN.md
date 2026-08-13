@@ -29,7 +29,7 @@ with everything green. One task should be one commit.
 - [x] T3a: Intake: plain text and pasted-block normaliser producing a Document
       with per-field confidence — done when: fixtures for a clean invoice, a
       truncated one, and rubbish each land in exactly one outcome.
-- [ ] T3b: Intake: PDF text-layer extraction via pdftotext, with a named failure
+- [x] T3b: Intake: PDF text-layer extraction via pdftotext, with a named failure
       when there is no text layer — done when: a text PDF extracts and a scanned
       one reports a capability gap rather than an empty pass.
 - [ ] T3c: Intake: image and PDF page rendering feeding the code decoder, every

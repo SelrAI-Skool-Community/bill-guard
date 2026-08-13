@@ -101,6 +101,10 @@ class Extraction:
 # file to text
 # ---------------------------------------------------------------------------
 
+PDF_EXTRACTOR_UNAVAILABLE = "PDF_EXTRACTOR_UNAVAILABLE"
+PDF_EXTRACTION_FAILED = "PDF_EXTRACTION_FAILED"
+PDF_TEXT_LAYER_MISSING = "PDF_TEXT_LAYER_MISSING"
+
 def _pdftotext_path() -> str | None:
     for candidate in ("pdftotext", "/opt/homebrew/bin/pdftotext",
                       "/usr/local/bin/pdftotext", "/usr/bin/pdftotext"):
@@ -116,19 +120,28 @@ def text_from_pdf(path: str) -> tuple[str, list]:
     gaps = []
     exe = _pdftotext_path()
     if not exe:
-        return "", ["No PDF text extractor is installed, so this PDF could "
+        return "", [f"{PDF_EXTRACTOR_UNAVAILABLE}: No PDF text extractor is "
+                    "installed, so this PDF could "
                     "not be read. Install poppler: brew install poppler"]
     try:
         out = subprocess.run([exe, "-layout", "-q", path, "-"],
                              capture_output=True, timeout=60)
     except subprocess.TimeoutExpired:
-        return "", ["The PDF took too long to read and was abandoned."]
+        return "", [f"{PDF_EXTRACTION_FAILED}: The PDF took too long to read "
+                    "and was abandoned."]
     except Exception as exc:
-        return "", [f"The PDF could not be read: {exc}"]
+        return "", [f"{PDF_EXTRACTION_FAILED}: The PDF could not be read: "
+                    f"{exc}"]
+    if out.returncode != 0:
+        detail = out.stderr.decode("utf-8", errors="replace").strip()
+        suffix = f" ({detail})" if detail else ""
+        return "", [f"{PDF_EXTRACTION_FAILED}: pdftotext could not read the "
+                    f"PDF{suffix}."]
     text = out.stdout.decode("utf-8", errors="replace")
     if len(text.strip()) < 20:
         gaps.append(
-            "This PDF has almost no text in it, which usually means it is a "
+            f"{PDF_TEXT_LAYER_MISSING}: This PDF has almost no text in it, "
+            "which usually means it is a "
             "scan or a photo saved as a PDF. The words on it cannot be read "
             "without character recognition, which is not installed. Nothing "
             "was checked against the text of this document.")
