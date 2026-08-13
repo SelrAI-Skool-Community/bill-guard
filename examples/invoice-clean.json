@@ -1,0 +1,22 @@
+{
+  "channel": "mailbox",
+  "received_at": "2026-08-10",
+  "supplier_name": "The Trustee for Tiles by Morrissey Trust",
+  "supplier_abn": "98273029681",
+  "supplier_domain": "post.xero.com",
+  "buyer_name": "Heka Corporation Pty Ltd",
+  "buyer_abn": "40156575753",
+  "invoice_number": "INV-19092",
+  "issue_date": "2026-07-23",
+  "due_date": "2026-08-06",
+  "currency": "AUD",
+  "subtotal": "971.00",
+  "tax": "97.10",
+  "total": "1068.10",
+  "balance_due": "1068.10",
+  "doc_type_words": "TAX INVOICE",
+  "raw_text": "TAX INVOICE  Tiles by Morrissey  ABN 98 273 029 681",
+  "payment": {"bsb": "062-000", "account_number": "12345678",
+              "account_name": "Tiles by Morrissey", "confidence": 0.99,
+              "source": "text"}
+}
