@@ -67,6 +67,44 @@ def registry_success_becomes_source_attributed_pass_evidence():
 
 
 @test
+def b01_confirms_valid_abn_against_dated_register_evidence():
+    abr = FakeLookup(_result("found", "Australian Business Register fixture",
+                             {"status": "Active"}))
+    result = _by_id(run_all(_doc(), None, {"lookup_clients": {"abr": abr}}),
+                    "B01")
+    eq(result.status, Status.PASS)
+    eq(abr.values, ["98273029681", "98273029681"])
+    true("Australian Business Register fixture" in result.evidence)
+    true("asked on 2026-08-13" in result.evidence)
+
+
+@test
+def b01_holds_when_valid_abn_is_not_on_register():
+    result = _by_id(run_all(_doc(), None, {"lookup_clients": {
+        "abr": FakeLookup(_result("not_found", "ABR fixture"))}}), "B01")
+    eq(result.status, Status.FAIL)
+    true("did not return this ABN" in result.evidence)
+
+
+@test
+def b01_holds_when_register_says_abn_is_cancelled():
+    result = _by_id(run_all(_doc(), None, {"lookup_clients": {
+        "abr": FakeLookup(_result("found", "ABR fixture",
+                                  {"status": "Cancelled"}))}}), "B01")
+    eq(result.status, Status.FAIL)
+    true("status=Cancelled" in result.evidence)
+
+
+@test
+def b01_is_unknown_when_offline_lookup_cannot_answer():
+    result = _by_id(run_all(_doc(), None, {"lookup_clients": {
+        "abr": FakeLookup(_result("unknown", "ABR fixture",
+                                  error="offline"))}}), "B01")
+    eq(result.status, Status.UNKNOWN)
+    true("offline" in result.evidence)
+
+
+@test
 def negative_registry_answers_fail_with_false_positive_limits():
     results = run_all(_doc(), None, {"lookup_clients": {
         "abr": FakeLookup(_result("not_found", "ABR fixture")),

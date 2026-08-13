@@ -9,6 +9,7 @@ from harness import test, eq, true, false, main
 from billguard import assess
 from billguard.checks import run_all
 from billguard.ledger import Ledger
+from billguard.lookups import LookupResult
 from billguard.model import (
     Channel, Document, FPRisk, LineItem, PaymentInstruction, Severity, Status,
 )
@@ -57,6 +58,16 @@ def _ledger_with_history(fp_paid: str | None = None) -> Ledger:
         led.record_destination(key, fp_paid, {"bsb": "062-000"}, "2026-01-05")
         led.mark_destination_paid(key, fp_paid, "2026-01-10")
     return led
+
+
+class _FixedLookup:
+    def __init__(self, status="found", data=None):
+        self.result = LookupResult(
+            status, "offline ABR fixture", "2026-08-13T00:00:00+00:00",
+            data or {"status": "Active"}, "fresh")
+
+    def lookup(self, value):
+        return self.result
 
 
 # ===========================================================================
@@ -471,7 +482,7 @@ def an_amount_with_no_way_to_pay_but_a_number_to_call():
 def a_clean_known_invoice_is_safe_to_pay():
     doc = _doc(buyer_abn="40156575753", supplier_domain="post.xero.com")
     led = _ledger_with_history(doc.payment.fingerprint())
-    v = assess(doc, led)
+    v = assess(doc, led, {"lookup_clients": {"abr": _FixedLookup()}})
     eq(v.outcome, SAFE, f"reasons: {v.reasons} unchecked: {v.not_checked}")
     led.close()
 

@@ -255,7 +255,8 @@ def bsb_directory_match(doc: Document, ledger, ctx) -> CheckResult:
 # FAMILY B -- business identity
 # ===========================================================================
 
-@check("B01", "Supplier ABN is present and passes its checksum", "identity")
+@check("B01", "Supplier ABN is present, valid, and confirmed by the ABR",
+       "identity")
 def abn_present_and_valid(doc: Document, ledger, ctx) -> CheckResult:
     """The ABN must be printed on the document.
 
@@ -278,14 +279,46 @@ def abn_present_and_valid(doc: Document, ledger, ctx) -> CheckResult:
                     "and withholding may apply. Do not look the supplier up "
                     "by name to fill the gap: that produces confident wrong "
                     "answers about different companies.")
-    if au.abn_is_valid(doc.supplier_abn):
-        return ok("B01", abn_present_and_valid.title,
-                  f"ABN {au.abn_format(doc.supplier_abn)} passes the checksum")
-    return fail("B01", abn_present_and_valid.title,
-                Severity.HOLD, FPRisk.NONE,
-                f"The ABN {doc.supplier_abn!r} fails its checksum, so it is "
-                f"not a real ABN. An invented number passes this test only "
-                f"about one time in 89.")
+    if not au.abn_is_valid(doc.supplier_abn):
+        return fail("B01", abn_present_and_valid.title,
+                    Severity.HOLD, FPRisk.NONE,
+                    f"The ABN {doc.supplier_abn!r} fails its checksum, so it is "
+                    f"not a real ABN. An invented number passes this test only "
+                    f"about one time in 89.")
+
+    formatted = au.abn_format(doc.supplier_abn)
+    result = _lookup(ctx, "abr", doc.supplier_abn)
+    if result is None:
+        return unknown(
+            "B01", abn_present_and_valid.title,
+            f"ABN {formatted} passes the checksum, but no ABR lookup client "
+            "was supplied, so register confirmation is unavailable")
+    evidence = (f"ABN {formatted} passes the checksum; {result.source} was "
+                f"asked on {result.observed_at}; cache={result.cache}")
+    if result.status == "unknown":
+        return unknown("B01", abn_present_and_valid.title,
+                       evidence + f"; lookup unavailable: {result.error}",
+                       lookup=result.to_dict())
+    if result.status == "not_found":
+        return fail("B01", abn_present_and_valid.title,
+                    Severity.HOLD, FPRisk.LOW,
+                    evidence + "; the register did not return this ABN",
+                    lookup=result.to_dict())
+
+    status = str(result.data.get("status") or "").strip()
+    if status.casefold() in {"cancelled", "canceled"}:
+        return fail("B01", abn_present_and_valid.title,
+                    Severity.HOLD, FPRisk.LOW,
+                    evidence + f"; register status={status}",
+                    lookup=result.to_dict())
+    if status.casefold() != "active":
+        return unknown("B01", abn_present_and_valid.title,
+                       evidence + "; register did not return a recognised "
+                       f"current status (status={status or 'missing'})",
+                       lookup=result.to_dict())
+    return ok("B01", abn_present_and_valid.title,
+              evidence + "; register status=Active",
+              lookup=result.to_dict())
 
 
 @check("B02", "Buyer identity present when the law requires it", "identity")
