@@ -22,7 +22,7 @@ with everything green. One task should be one commit.
 - [x] T2c: Add family E, document integrity: producer-tool drift against this
       supplier's own history — done when: drift alone is INFO, and drift plus a
       changed payment destination is a HOLD.
-- [ ] T2d: Add check D06, payment destination cross-checked against the decoded
+- [x] T2d: Add check D06, payment destination cross-checked against the decoded
       code payload — done when: text and code agreeing passes, disagreeing holds,
       and a code with no destination returns unknown.
 

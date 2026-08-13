@@ -58,7 +58,7 @@ def registry_success_becomes_source_attributed_pass_evidence():
                                          "abr": abr, "bsb": bsb,
                                          "sanctions": sanctions}})
     for check_id, source in (("B03", "ABR fixture"),
-                             ("D06", "BSB fixture"),
+                             ("D07", "BSB fixture"),
                              ("E01", "DFAT fixture")):
         result = _by_id(results, check_id)
         eq(result.status, Status.PASS)
@@ -182,7 +182,7 @@ def negative_registry_answers_fail_with_false_positive_limits():
         "bsb": FakeLookup(_result("not_found", "BSB fixture")),
         "sanctions": FakeLookup(_result("found", "DFAT fixture", {
             "exact_matches": [{"name": "Example Supplies Pty Ltd"}]}))}})
-    for check_id in ("B03", "D06", "E01"):
+    for check_id in ("B03", "D07", "E01"):
         result = _by_id(results, check_id)
         eq(result.status, Status.FAIL)
         true(result.fp_risk.value in ("none", "low"))
@@ -192,7 +192,7 @@ def negative_registry_answers_fail_with_false_positive_limits():
 @test
 def missing_or_failed_registry_capability_is_unknown_not_pass():
     without = run_all(_doc(), None, {})
-    for check_id in ("B03", "D06", "E01"):
+    for check_id in ("B03", "D07", "E01"):
         eq(_by_id(without, check_id).status, Status.UNKNOWN)
 
     failed = run_all(_doc(), None, {"lookup_clients": {
@@ -200,7 +200,7 @@ def missing_or_failed_registry_capability_is_unknown_not_pass():
         "bsb": FakeLookup(_result("unknown", "BSB fixture", error="timeout")),
         "sanctions": FakeLookup(_result("unknown", "DFAT fixture",
                                              error="timeout"))}})
-    for check_id in ("B03", "D06", "E01"):
+    for check_id in ("B03", "D07", "E01"):
         result = _by_id(failed, check_id)
         eq(result.status, Status.UNKNOWN)
         true("timeout" in result.evidence)

@@ -227,27 +227,86 @@ def code_destination_agrees(doc: Document, ledger, ctx) -> list[CheckResult]:
     return out
 
 
-@check("D06", "BSB appears in the supplied directory", "payment")
+def _code_destination_fingerprint(code: dict) -> str | None:
+    """Put a decoded destination in the same namespace as document payment.
+
+    Intake stores the parser's destination rather than a PaymentInstruction,
+    so the scheme supplies the otherwise implicit destination type. Already
+    canonical fingerprints are accepted for agent/library callers.
+    """
+    destination = code.get("destination")
+    if not isinstance(destination, str) or not destination.strip():
+        return None
+    destination = destination.strip()
+    if re.match(r"^au:", destination, re.I):
+        return destination.lower()
+    if re.match(r"^iban:", destination, re.I):
+        return "iban:" + destination.split(":", 1)[1].replace(" ", "").upper()
+    if re.match(r"^payid:", destination, re.I):
+        return destination.lower()
+    if re.match(r"^(bpay|crypto):", destination, re.I):
+        return destination
+    scheme = str(code.get("scheme") or "").lower()
+    if scheme == "epc":
+        return "iban:" + destination.replace(" ", "").upper()
+    if scheme == "upi":
+        return "payid:" + destination.lower()
+    return destination
+
+
+@check("D06", "Payment destination agrees with the decoded code payload",
+       "payment")
+def decoded_destination_match(doc: Document, ledger, ctx) -> CheckResult:
+    codes = doc.artifacts.get("qr_codes") or []
+    if not codes:
+        return not_applicable("D06", decoded_destination_match.title,
+                              "no decoded code payload appears on the document")
+    code_destinations = [_code_destination_fingerprint(code) for code in codes]
+    if any(value is None for value in code_destinations):
+        return unknown("D06", decoded_destination_match.title,
+                       "a code was decoded but its payload states no payment "
+                       "destination")
+    text_destination = doc.payment.fingerprint()
+    if text_destination is None:
+        return unknown("D06", decoded_destination_match.title,
+                       "the code states a payment destination but no text "
+                       "payment destination was extracted for comparison")
+    if all(value == text_destination for value in code_destinations):
+        return ok("D06", decoded_destination_match.title,
+                  "the text payment destination and decoded code payload "
+                  f"agree on {text_destination}",
+                  text_destination=text_destination,
+                  code_destinations=code_destinations)
+    return fail(
+        "D06", decoded_destination_match.title, Severity.HOLD, FPRisk.LOW,
+        "The payment destination printed as text does not agree with the "
+        "destination inside the decoded code payload.",
+        text_destination=text_destination,
+        code_destinations=code_destinations,
+        action="Do not pay until the destination is verified out of band.")
+
+
+@check("D07", "BSB appears in the supplied directory", "payment")
 def bsb_directory_match(doc: Document, ledger, ctx) -> CheckResult:
     if not doc.payment.bsb:
-        return not_applicable("D06", bsb_directory_match.title,
+        return not_applicable("D07", bsb_directory_match.title,
                               "no BSB appears in the payment instruction")
     result = _lookup(ctx, "bsb", doc.payment.bsb)
     if result is None:
-        return unknown("D06", bsb_directory_match.title,
+        return unknown("D07", bsb_directory_match.title,
                        "no BSB-directory client was supplied")
     evidence = (f"{result.source}, observed {result.observed_at}; "
                 f"cache={result.cache}")
     if result.status == "unknown":
-        return unknown("D06", bsb_directory_match.title,
+        return unknown("D07", bsb_directory_match.title,
                        evidence + f"; lookup unavailable: {result.error}")
     if result.status == "not_found":
-        return fail("D06", bsb_directory_match.title,
+        return fail("D07", bsb_directory_match.title,
                     Severity.QUERY, FPRisk.LOW,
                     evidence + "; the directory did not return this BSB",
                     lookup=result.to_dict())
     institution = result.data.get("institution") or "unnamed institution"
-    return ok("D06", bsb_directory_match.title,
+    return ok("D07", bsb_directory_match.title,
               evidence + f"; listed institution={institution}",
               lookup=result.to_dict())
 

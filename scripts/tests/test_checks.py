@@ -188,6 +188,47 @@ def a_broken_code_checksum_is_a_hold():
     eq(r.severity, Severity.HOLD)
 
 
+@test
+def text_and_code_payment_destinations_agree():
+    doc = _doc()
+    doc.artifacts["qr_codes"] = [
+        {"scheme": "emvco", "destination": "au:062000:12345678"}]
+    r = _by_id(run_all(doc, None), "D06")
+    eq(r.status, Status.PASS)
+    true("agree" in r.evidence)
+
+
+@test
+def text_and_code_payment_destinations_disagree_and_hold():
+    doc = _doc()
+    doc.artifacts["qr_codes"] = [
+        {"scheme": "emvco", "destination": "au:083004:99887766"}]
+    r = _by_id(run_all(doc, None), "D06")
+    eq(r.status, Status.FAIL)
+    eq(r.severity, Severity.HOLD)
+    eq(r.detail["text_destination"], "au:062000:12345678")
+
+
+@test
+def decoded_code_without_destination_is_unknown():
+    doc = _doc()
+    doc.artifacts["qr_codes"] = [
+        {"scheme": "text", "destination": None}]
+    r = _by_id(run_all(doc, None), "D06")
+    eq(r.status, Status.UNKNOWN)
+    true("states no payment destination" in r.evidence)
+
+
+@test
+def one_destinationless_code_is_not_ignored_beside_a_matching_code():
+    doc = _doc()
+    doc.artifacts["qr_codes"] = [
+        {"scheme": "emvco", "destination": "au:062000:12345678"},
+        {"scheme": "text", "destination": None},
+    ]
+    eq(_by_id(run_all(doc, None), "D06").status, Status.UNKNOWN)
+
+
 # ===========================================================================
 # E02 -- document integrity
 # ===========================================================================
