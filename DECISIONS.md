@@ -37,3 +37,4 @@ One block per resolved decision. A line beginning NEEDS_HUMAN flags a gate await
 - REVIEW: T2a — confidence=high — concerns: none; focused tests directly exercise found, not-found, cancelled, offline unknown, unrecognised status, and dated source evidence
 - CROSS_REVIEW: iter 4 — author=codex reviewer=claude verdict=accept confidence=high — risk: ABR "found" result with no "status" key at all — degrades to unknown (safe), but untested — note: clean
 - CROSS_REVIEW: iter 1 — author=codex reviewer=claude verdict=accept confidence=high — risk: a non-ISO issue_date string (e.g. "2026-13-99") hits the untested ValueError→unknown branch — note: clean; optional follow-up to cover the malformed issue_date path
+- CROSS_REVIEW: iter 2 — author=codex reviewer=claude verdict=accept confidence=high — risk: none found — note: clean — coverage-only hardening of B03's malformed-date path, matches implementation

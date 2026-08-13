@@ -157,6 +157,16 @@ def b03_is_unknown_without_invoice_date():
 
 
 @test
+def b03_is_unknown_with_a_malformed_invoice_date():
+    result = _by_id(run_all(_doc(issue_date="2026-13-99"), None, {
+        "lookup_clients": {"abr": FakeLookup(_result(
+            "found", "ABR fixture", {"status": "Active"}))}
+    }), "B03")
+    eq(result.status, Status.UNKNOWN)
+    true("not a valid ISO date" in result.evidence)
+
+
+@test
 def b03_is_unknown_when_cancelled_without_an_effective_date():
     result = _by_id(run_all(_doc(), None, {"lookup_clients": {
         "abr": FakeLookup(_result("found", "ABR fixture",
