@@ -50,7 +50,7 @@ with everything green. One task should be one commit.
 - [x] T6a: Declarative niche pack loader with schema validation — done when: a
       valid pack loads, an invalid one is rejected with a named reason, and pack
       findings carry the same evidence shape as built-in checks.
-- [ ] T6b: Ship the construction pack: progress-claim arithmetic and retention —
+- [x] T6b: Ship the construction pack: progress-claim arithmetic and retention —
       done when: claimed-to-date minus previously-certified must equal this claim,
       and a claim missing any of the three is held rather than guessed.
 

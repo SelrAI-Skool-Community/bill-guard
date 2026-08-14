@@ -28,6 +28,7 @@ class PackRule:
     severity: Severity
     fp_risk: FPRisk
     evidence: Mapping[str, str]
+    missing_behavior: str = "unknown"
 
     def evaluate(self, values: Mapping[str, Any]) -> CheckResult:
         missing = [name for name in self.fields if values.get(name) is None]
@@ -35,6 +36,10 @@ class PackRule:
             display = _format_values(values)
             display["missing"] = ", ".join(missing)
             message = self.evidence["unknown"].format_map(display)
+            if self.missing_behavior == "fail":
+                return fail(self.check_id, self.title, self.severity, self.fp_risk,
+                            message, pack_operator=self.operator,
+                            missing_fields=missing)
             return unknown(self.check_id, self.title, message,
                            pack_operator=self.operator, missing_fields=missing)
 
@@ -111,7 +116,7 @@ def _validate_rule(raw: Any, index: int) -> PackRule:
     at = f"pack.rules[{index}]"
     _mapping(raw, at)
     allowed = {"check_id", "title", "operator", "fields", "severity",
-               "fp_risk", "evidence"}
+               "fp_risk", "evidence", "missing_behavior"}
     extra = set(raw) - allowed
     if extra:
         raise PackValidationError(f"{at}: unknown key {sorted(extra)[0]!r}")
@@ -129,6 +134,10 @@ def _validate_rule(raw: Any, index: int) -> PackRule:
             f"{at}.fields: {operator!r} requires {arities[operator]} field name(s)")
     severity = _enum(Severity, raw.get("severity"), f"{at}.severity")
     fp_risk = _enum(FPRisk, raw.get("fp_risk"), f"{at}.fp_risk")
+    missing_behavior = raw.get("missing_behavior", "unknown")
+    if missing_behavior not in {"unknown", "fail"}:
+        raise PackValidationError(
+            f"{at}.missing_behavior: must be 'unknown' or 'fail'")
     evidence = raw.get("evidence")
     _mapping(evidence, f"{at}.evidence")
     if set(evidence) != {"pass", "fail", "unknown"}:
@@ -147,8 +156,12 @@ def _validate_rule(raw: Any, index: int) -> PackRule:
             raise PackValidationError(
                 f"{at}.evidence.{key}: unknown placeholder "
                 f"{sorted(unsupported)[0]!r}")
+        if key != "unknown" and "missing" in placeholders:
+            raise PackValidationError(
+                f"{at}.evidence.{key}: placeholder 'missing' is only "
+                "available in unknown evidence")
     return PackRule(check_id, title, operator, tuple(fields), severity,
-                    fp_risk, dict(evidence))
+                    fp_risk, dict(evidence), missing_behavior)
 
 
 def _mapping(value: Any, at: str) -> None:

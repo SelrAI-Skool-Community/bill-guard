@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "au-construction-progress-claim",
+  "name": "Australian construction progress claim checks",
+  "version": 1,
+  "rules": [
+    {
+      "check_id": "CON01",
+      "title": "Progress claim arithmetic agrees",
+      "operator": "difference_equals",
+      "fields": [
+        "claimed_to_date_cents",
+        "previously_certified_cents",
+        "this_claim_cents"
+      ],
+      "severity": "hold",
+      "fp_risk": "none",
+      "missing_behavior": "fail",
+      "evidence": {
+        "pass": "Claimed to date minus previously certified equals this claim ({this_claim_cents} cents).",
+        "fail": "Claimed to date minus previously certified does not equal this claim ({this_claim_cents} cents).",
+        "unknown": "Hold for review: claim arithmetic cannot be checked because {missing} is missing."
+      }
+    },
+    {
+      "check_id": "CON02",
+      "title": "Retention amount is stated",
+      "operator": "required",
+      "fields": ["retention_cents"],
+      "severity": "hold",
+      "fp_risk": "none",
+      "missing_behavior": "fail",
+      "evidence": {
+        "pass": "Retention is stated as {retention_cents} cents.",
+        "fail": "Retention amount is not stated.",
+        "unknown": "Hold for review: retention cannot be checked because {missing} is missing."
+      }
+    }
+  ]
+}
