@@ -23,8 +23,8 @@ def _doc(**kw) -> Document:
     base = dict(
         doc_id="doc-1",
         channel=Channel.MAILBOX,
-        supplier_name="Tiles by Morrissey Trust",
-        supplier_abn="98273029681",
+        supplier_name="Northwind Tiling Trust",
+        supplier_abn="11111111138",
         invoice_number="INV-19092",
         issue_date="2026-07-23",
         currency="AUD",
@@ -40,7 +40,7 @@ def _doc(**kw) -> Document:
     if "payment" not in kw:
         doc.payment = PaymentInstruction(
             bsb="062-000", account_number="12345678",
-            account_name="Tiles by Morrissey", confidence=0.99, source="text")
+            account_name="Northwind Tiling", confidence=0.99, source="text")
     return doc
 
 
@@ -53,8 +53,8 @@ def _by_id(results, check_id):
 
 def _ledger_with_history(fp_paid: str | None = None) -> Ledger:
     led = Ledger(":memory:")
-    key = "abn:98273029681"
-    led.upsert_supplier(key, "Tiles by Morrissey Trust", "98273029681",
+    key = "abn:11111111138"
+    led.upsert_supplier(key, "Northwind Tiling Trust", "11111111138",
                         "2026-01-05")
     led.record_sender(key, "post.xero.com", "2026-01-05", is_relay=True)
     if fp_paid:
@@ -107,8 +107,8 @@ def changed_bank_details_are_a_hold():
 def a_seen_but_never_paid_destination_is_not_a_baseline():
     """An attacker's account is 'seen' the instant their invoice lands."""
     led = Ledger(":memory:")
-    key = "abn:98273029681"
-    led.upsert_supplier(key, "Tiles", "98273029681", "2026-01-05")
+    key = "abn:11111111138"
+    led.upsert_supplier(key, "Tiles", "11111111138", "2026-01-05")
     led.record_destination(key, "au:062000:12345678", {}, "2026-01-05")
     doc = _doc()
     r = _by_id(run_all(doc, led), "D01")
@@ -235,7 +235,7 @@ def one_destinationless_code_is_not_ignored_beside_a_matching_code():
 
 def _record_producer_history(led, producer="Xero PDF Engine"):
     led.record_document(
-        "old-producer-doc", "old-producer-hash", "abn:98273029681",
+        "old-producer-doc", "old-producer-hash", "abn:11111111138",
         "INV-18000", "2026-01-05", 90000, "AUD", "mailbox",
         "2026-01-05", "SAFE TO PAY", payload={"producer_tool": producer})
 
@@ -342,7 +342,7 @@ def buyer_identity_required_above_one_thousand():
     doc = _doc(total_cents=99999, buyer_name=None, buyer_abn=None)
     eq(_by_id(run_all(doc, None), "B02").status, Status.NOT_APPLICABLE)
 
-    doc = _doc(total_cents=100000, buyer_abn="40156575753")
+    doc = _doc(total_cents=100000, buyer_abn="11111111219")
     eq(_by_id(run_all(doc, None), "B02").status, Status.PASS)
 
 
@@ -407,7 +407,7 @@ def line_items_must_sum_to_subtotal():
 def a_zero_balance_document_is_a_receipt_not_a_bill():
     """A receipt must never read as a fraud hold.
 
-    Found on real data: 8 of 15 genuine invoices from Luke's inbox were
+    Found on real data: 8 of 15 genuine invoices in a live inbox were
     payment confirmations, and every one came back HOLD. That is how a
     checker teaches its user to ignore it.
     """
@@ -512,7 +512,7 @@ def missing_balance_field_is_unknown_not_pass():
 @test
 def same_number_with_changed_payee_is_the_fraud_shape():
     led = _ledger_with_history("au:062000:12345678")
-    key = "abn:98273029681"
+    key = "abn:11111111138"
     led.record_document("old-1", "hash-old", key, "INV-19092", "2026-07-23",
                         106810, "AUD", "mailbox", "2026-07-23",
                         payload={"payment_fingerprint": "au:062000:12345678"})
@@ -530,7 +530,7 @@ def same_number_with_changed_payee_is_the_fraud_shape():
 def same_number_same_payee_is_only_a_query():
     fp = "au:062000:12345678"
     led = _ledger_with_history(fp)
-    key = "abn:98273029681"
+    key = "abn:11111111138"
     led.record_document("old-1", "hash-old", key, "INV-19092", "2026-07-23",
                         106810, "AUD", "mailbox", "2026-07-23",
                         payload={"payment_fingerprint": fp})
@@ -606,7 +606,7 @@ def an_amount_with_no_way_to_pay_but_a_number_to_call():
 
 @test
 def a_clean_known_invoice_is_safe_to_pay():
-    doc = _doc(buyer_abn="40156575753", supplier_domain="post.xero.com")
+    doc = _doc(buyer_abn="11111111219", supplier_domain="post.xero.com")
     led = _ledger_with_history(doc.payment.fingerprint())
     v = assess(doc, led, {"lookup_clients": {"abr": _FixedLookup()}})
     eq(v.outcome, SAFE, f"reasons: {v.reasons} unchecked: {v.not_checked}")
@@ -616,7 +616,7 @@ def a_clean_known_invoice_is_safe_to_pay():
 @test
 def a_changed_account_produces_a_hold_end_to_end():
     led = _ledger_with_history("au:062000:12345678")
-    doc = _doc(buyer_abn="40156575753")
+    doc = _doc(buyer_abn="11111111219")
     doc.payment = PaymentInstruction(bsb="083-004", account_number="99887766",
                                      confidence=0.99)
     v = assess(doc, led)
@@ -629,7 +629,7 @@ def a_changed_account_produces_a_hold_end_to_end():
 def every_verdict_states_the_bank_ownership_limit():
     """Silence about this would be the one dishonest thing in the product."""
     led = _ledger_with_history("au:062000:12345678")
-    for doc in (_doc(buyer_abn="40156575753"),
+    for doc in (_doc(buyer_abn="11111111219"),
                 _doc(supplier_abn="12345678901"),
                 _doc(balance_due_cents=0)):
         v = assess(doc, led)
@@ -640,7 +640,7 @@ def every_verdict_states_the_bank_ownership_limit():
 
 @test
 def unknown_material_checks_block_a_green_verdict():
-    doc = _doc(buyer_abn="40156575753")
+    doc = _doc(buyer_abn="11111111219")
     v = assess(doc, None)          # no ledger: D01 cannot run
     eq(v.outcome, QUERY, "a green verdict must not rest on checks that "
                          "never ran")

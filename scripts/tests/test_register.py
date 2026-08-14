@@ -24,7 +24,7 @@ def _result(status, source, data=None, error=None):
 def _doc(**changes):
     values = dict(
         doc_id="registry-test", channel=Channel.UPLOAD,
-        supplier_name="Example Supplies Pty Ltd", supplier_abn="98273029681",
+        supplier_name="Example Supplies Pty Ltd", supplier_abn="11111111138",
         invoice_number="INV-1", issue_date="2026-08-01",
         due_date="2026-08-20", subtotal_cents=10000, tax_cents=1000,
         total_cents=11000, balance_due_cents=11000, currency="AUD",
@@ -73,7 +73,7 @@ def b01_confirms_valid_abn_against_dated_register_evidence():
     result = _by_id(run_all(_doc(), None, {"lookup_clients": {"abr": abr}}),
                     "B01")
     eq(result.status, Status.PASS)
-    eq(abr.values, ["98273029681", "98273029681"])
+    eq(abr.values, ["11111111138", "11111111138"])
     true("Australian Business Register fixture" in result.evidence)
     true("asked on 2026-08-13" in result.evidence)
 

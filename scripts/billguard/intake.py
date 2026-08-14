@@ -550,7 +550,7 @@ def _guess_supplier_name(text: str) -> str | None:
         if re.search(r"\d{2,}", s):
             continue
         # A labelled line is the label plus its value, not the letterhead.
-        # "Account Name: Tiles by Morrissey" used to be read whole.
+        # "Account Name: Northwind Tiling" used to be read whole.
         if re.match(r"^(account|bank|payment|attention|attn|bill|ship|to|"
                     r"from|customer|client|abn|acn|phone|email|address)\b"
                     r"[^:]{0,20}:", s, re.I):

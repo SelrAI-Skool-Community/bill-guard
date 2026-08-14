@@ -9,18 +9,18 @@ from billguard.model import to_cents, from_cents
 
 @test
 def real_abns_pass():
-    # Selr AI's own trust, and its tested-live pair from the architecture work.
-    true(au.abn_is_valid("40156575753"), "Heka Family Trust ABN")
-    true(au.abn_is_valid("98273029681"), "Tiles by Morrissey Trust ABN")
-    true(au.abn_is_valid("12706916336"), "the cancelled partnership ABN")
-    true(au.abn_is_valid("40 156 575 753"), "spaces must be tolerated")
-    true(au.abn_is_valid("40-156-575-753"), "hyphens must be tolerated")
+    # Real-shaped ABNs with valid checksums. Fictional entities.
+    true(au.abn_is_valid("11111111219"), "an Australian trading trust ABN")
+    true(au.abn_is_valid("11111111138"), "Northwind Tiling Trust ABN")
+    true(au.abn_is_valid("11111111991"), "the cancelled partnership ABN")
+    true(au.abn_is_valid("11 111 111 219"), "spaces must be tolerated")
+    true(au.abn_is_valid("11-111-111-219"), "hyphens must be tolerated")
 
 
 @test
 def wrong_length_fails():
-    false(au.abn_is_valid("4015657575"), "10 digits")
-    false(au.abn_is_valid("401565757530"), "12 digits")
+    false(au.abn_is_valid("1111111121"), "10 digits")
+    false(au.abn_is_valid("111111112190"), "12 digits")
     false(au.abn_is_valid(""), "empty")
     false(au.abn_is_valid(None), "none")
 
@@ -28,10 +28,10 @@ def wrong_length_fails():
 @test
 def single_digit_change_fails():
     # A checksum that does not catch a transposition is not doing its job.
-    true(au.abn_is_valid("40156575753"))
-    false(au.abn_is_valid("40156575754"), "last digit changed")
-    false(au.abn_is_valid("41156575753"), "second digit changed")
-    false(au.abn_is_valid("40156575735"), "last two transposed")
+    true(au.abn_is_valid("11111111219"))
+    false(au.abn_is_valid("11111111218"), "last digit changed")
+    false(au.abn_is_valid("12111111219"), "second digit changed")
+    false(au.abn_is_valid("11111111291"), "last two transposed")
 
 
 @test
@@ -47,7 +47,7 @@ def invented_abns_almost_always_fail():
 
 @test
 def abn_format_groups_correctly():
-    eq(au.abn_format("40156575753"), "40 156 575 753")
+    eq(au.abn_format("11111111219"), "11 111 111 219")
     eq(au.abn_format("bad"), None)
 
 
@@ -55,17 +55,17 @@ def abn_format_groups_correctly():
 
 @test
 def acn_checksum_works():
-    true(au.acn_is_valid("678725301"), "Heka Corporation ACN")
-    false(au.acn_is_valid("678725302"), "check digit changed")
+    true(au.acn_is_valid("111111114"), "an Australian company ACN")
+    false(au.acn_is_valid("111111115"), "check digit changed")
     false(au.acn_is_valid("12345678"), "8 digits")
 
 
 @test
 def abn_recovers_from_acn():
-    got = au.abn_from_acn("678725301")
+    got = au.abn_from_acn("111111114")
     true(got is not None, "should find a valid prefix")
     true(au.abn_is_valid(got), "recovered ABN must itself validate")
-    true(got.endswith("678725301"), "must keep the ACN as the tail")
+    true(got.endswith("111111114"), "must keep the ACN as the tail")
 
 
 # --- BSB -------------------------------------------------------------------
@@ -102,7 +102,7 @@ def gst_on_inclusive_total_is_one_eleventh():
     eq(au.gst_on_inclusive_total(11000), 1000, "$110.00 inc GST -> $10.00")
     eq(au.gst_on_inclusive_total(0), 0)
     eq(au.gst_on_inclusive_total(100), 9, "$1.00 -> 9c, half-up")
-    eq(au.gst_on_inclusive_total(106810), 9710, "the live Tiles invoice total")
+    eq(au.gst_on_inclusive_total(106810), 9710, "a real-world invoice total")
 
 
 @test

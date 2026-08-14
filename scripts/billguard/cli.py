@@ -383,7 +383,7 @@ def _record_payment(led: Ledger, args) -> int:
     if not args.supplier_key or not args.fingerprint:
         print("Tell it which supplier and which account was paid:\n"
               "  billguard ledger record-payment --ledger <file> \\\n"
-              "      --supplier-key abn:98273029681 \\\n"
+              "      --supplier-key abn:11111111138 \\\n"
               "      --fingerprint au:062000:12345678 --when 2026-08-11\n\n"
               "Run 'billguard check <invoice> --json' and look at "
               "checks -> D01 -> detail for the exact values for an invoice.",

@@ -15,8 +15,8 @@ from billguard.qr import DecodedCode, PaymentPayload
 
 FIXTURES = Path(__file__).resolve().parents[2] / "examples" / "intake"
 
-CLEAN = """Tiles by Morrissey
-ABN 98 273 029 681
+CLEAN = """Northwind Tiling
+ABN 11 111 111 138
 
 TAX INVOICE
 
@@ -39,7 +39,7 @@ Account Number: 12345678
 def reads_a_plain_invoice():
     ex = intake.from_text(CLEAN)
     d = ex.document
-    eq(d.supplier_abn, "98273029681")
+    eq(d.supplier_abn, "11111111138")
     eq(d.invoice_number, "INV-19092")
     eq(d.issue_date, "2026-07-23")
     eq(d.due_date, "2026-08-06")
@@ -73,7 +73,7 @@ def a_valid_abn_is_read_with_certainty():
 
 @test
 def an_abn_failing_its_checksum_is_reported():
-    ex = intake.from_text(CLEAN.replace("98 273 029 681", "98 273 029 682"))
+    ex = intake.from_text(CLEAN.replace("11 111 111 138", "11 111 111 139"))
     true(any("fails its checksum" in g for g in ex.gaps))
 
 
@@ -95,7 +95,7 @@ def payment_block_confidence_is_reported():
 @test
 def a_receipt_is_recognised_by_its_words():
     ex = intake.from_text("Payment received. Thanks for your payment.\n"
-                          "Invoice Number: INV-1\nTotal 50.00\nABN 98 273 029 681")
+                          "Invoice Number: INV-1\nTotal 50.00\nABN 11 111 111 138")
     eq(ex.document.balance_due_cents, 0)
 
 
