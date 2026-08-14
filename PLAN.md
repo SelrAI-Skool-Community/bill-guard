@@ -47,7 +47,7 @@ with everything green. One task should be one commit.
       done when: a payment claim's reply deadline is computed for two states and
       the source of each rule is named in the evidence.
 
-- [ ] T6a: Declarative niche pack loader with schema validation — done when: a
+- [x] T6a: Declarative niche pack loader with schema validation — done when: a
       valid pack loads, an invalid one is rejected with a named reason, and pack
       findings carry the same evidence shape as built-in checks.
 - [ ] T6b: Ship the construction pack: progress-claim arithmetic and retention —

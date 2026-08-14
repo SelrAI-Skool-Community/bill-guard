@@ -17,6 +17,7 @@ from .verdict import (HOLD, QUERY, SAFE, SETTLED, Verdict, decide,  # noqa: F401
                       render_text)
 from .lookups import (AbrClient, BsbClient, LookupClient, LookupResult,
                       SanctionsClient)  # noqa: F401
+from .packs import Pack, PackRule, PackValidationError, load_pack  # noqa: F401
 
 __version__ = "0.1.0"
 
@@ -26,6 +27,7 @@ __all__ = [
     "decide", "render_text", "from_cents", "to_cents",
     "HOLD", "QUERY", "SAFE", "SETTLED", "assess",
     "AbrClient", "BsbClient", "LookupClient", "LookupResult", "SanctionsClient",
+    "Pack", "PackRule", "PackValidationError", "load_pack",
 ]
 
 
