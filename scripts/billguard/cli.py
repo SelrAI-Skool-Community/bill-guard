@@ -34,6 +34,10 @@ EXIT_QUERY = 1
 EXIT_HOLD = 2
 EXIT_ERROR = 3
 
+# Public JSON input contract. Version 1 remains tolerant of additive fields so
+# newer producers can talk to older Bill Guard readers without failing.
+DOCUMENT_SCHEMA_VERSION = 1
+
 _EXIT = {SAFE: EXIT_SAFE, QUERY: EXIT_QUERY, HOLD: EXIT_HOLD,
          SETTLED: EXIT_SAFE}
 
@@ -49,6 +53,16 @@ def document_from_dict(data: dict) -> Document:
     integer. Decimal strings are converted through integer cents so nothing
     ever touches a float.
     """
+    if not isinstance(data, dict):
+        raise ValueError("document JSON must be an object")
+    schema_version = data.get("schema_version", DOCUMENT_SCHEMA_VERSION)
+    if (not isinstance(schema_version, int) or
+            isinstance(schema_version, bool) or
+            schema_version != DOCUMENT_SCHEMA_VERSION):
+        raise ValueError(
+            f"unsupported document schema_version {schema_version!r}; "
+            f"supported version is {DOCUMENT_SCHEMA_VERSION}")
+
     def money(name):
         if f"{name}_cents" in data and data[f"{name}_cents"] is not None:
             return int(data[f"{name}_cents"])
@@ -94,7 +108,7 @@ def document_from_dict(data: dict) -> Document:
     except ValueError:
         channel = Channel.UNKNOWN
 
-    unknown_keys = sorted(set(data) - _KNOWN_KEYS)
+    unknown_keys = sorted(set(data) - DOCUMENT_V1_FIELDS)
 
     doc = Document(
         doc_id=data.get("doc_id") or "",
@@ -129,10 +143,10 @@ def document_from_dict(data: dict) -> Document:
     return doc
 
 
-#: Everything document_from_dict understands. Anything else is a typo, and a
-#: silently discarded field produces a confident verdict computed from
-#: nothing, which is worse than an error.
-_KNOWN_KEYS = frozenset({
+#: The frozen version-one input shape. Additive fields are ignored for forward
+#: compatibility, but the CLI reports their names so likely typos stay visible.
+DOCUMENT_V1_FIELDS = frozenset({
+    "schema_version",
     "doc_id", "channel", "received_at", "supplier_name", "supplier_abn",
     "supplier_domain", "supplier_country", "buyer_name", "buyer_abn",
     "invoice_number", "issue_date", "due_date", "po_reference", "currency",

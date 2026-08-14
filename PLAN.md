@@ -54,7 +54,7 @@ with everything green. One task should be one commit.
       done when: claimed-to-date minus previously-certified must equal this claim,
       and a claim missing any of the three is held rather than guessed.
 
-- [ ] T7a: Freeze the JSON document contract and version it — done when: a
+- [x] T7a: Freeze the JSON document contract and version it — done when: a
       contract test asserts the shape and an unknown field is ignored, not fatal.
 - [ ] T7b: Agent-tool adapter: a single function taking JSON and returning the
       verdict JSON — done when: the same fixture through library, CLI and adapter
