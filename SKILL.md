@@ -37,44 +37,56 @@ evidence.
 
 ```bash
 S=~/Projects/bill-guard/scripts
+L=~/billguard.db
 
-# assess one invoice
-python3 $S/billguard.py check invoice.json --ledger ~/.billguard/ledger.db --remember
+# assess a bill: PDF, photo, saved email, text file, or prepared JSON
+python3 $S/billguard.py check invoice.pdf --ledger $L --remember
 
 # machine-readable, for agents and routines
-python3 $S/billguard.py check invoice.json --ledger ~/.billguard/ledger.db --json
+python3 $S/billguard.py check invoice.pdf --ledger $L --json
+
+# tell it you actually paid one, by pointing at the same file. This is what
+# makes the bank-change check trustworthy: seeing a destination is not
+# paying it.
+python3 $S/billguard.py paid invoice.pdf --ledger $L
+
+# show what was read off a page, with a confidence on every field
+python3 $S/billguard.py read invoice.pdf
+
+# paste text instead of a file
+pbpaste | python3 $S/billguard.py check -
 
 # decode every code on a page and say where the money would go
 python3 $S/billguard.py scan-codes invoice.png
 
-# record that a payment actually went out. This is what makes the
-# bank-change check trustworthy: seeing a destination is not paying it.
-python3 $S/billguard.py ledger record-payment --ledger ~/.billguard/ledger.db \
-    --supplier-key "abn:98273029681" --fingerprint "au:062000:12345678" \
-    --when 2026-08-11
+# process a whole folder and write a digest, acting on nothing
+python3 $S/billguard.py scheduled-run ~/bills --ledger $L --output ~/bills-digest.json
 
-python3 $S/billguard.py ledger stats --ledger ~/.billguard/ledger.db
 python3 $S/billguard.py capabilities      # what this install can and cannot do
 python3 $S/billguard.py selftest
 ```
 
 Exit codes carry the verdict, so a routine can branch on them without
-parsing anything: `0` safe to pay, `1` query, `2` hold, `3` error.
+parsing anything: `0` safe to pay or nothing to pay, `1` query, `2` hold,
+`3` could not read it.
 
 As a library:
 
 ```python
-from billguard import Document, assess
+from billguard import assess, check_json
 from billguard.ledger import Ledger
 
-verdict = assess(doc, Ledger("~/.billguard/ledger.db"))
-print(verdict.outcome)     # "SAFE TO PAY" | "QUERY" | "HOLD"
+verdict = assess(doc, Ledger("~/billguard.db"))
+print(verdict.outcome)   # SAFE TO PAY | QUERY | HOLD | NOTHING TO PAY
+
+# or the versioned JSON contract, for an agent tool call
+result = check_json({"supplier_abn": "...", "total": "1068.10"})
 ```
 
 ## What it checks
 
-Nine families. Every check returns pass, fail, or **unknown**, with its
-evidence and its known false-positive risk.
+Twenty-seven checks in ten families. Every one returns pass, fail, or
+**unknown**, with its evidence and its known false-positive risk.
 
 | | Family | What it asks |
 |---|---|---|
@@ -87,6 +99,7 @@ evidence and its known false-positive risk.
 | G | Duplicate | Already paid? Already seen? Balance already zero? |
 | H | Scam shapes | Fake renewals, solicitations, refund-call bait |
 | I | Clocks | Deadlines where doing nothing creates a debt |
+| J | Packs | Trade-specific rules, e.g. progress claims and retention |
 
 ## The rules that never bend
 
@@ -145,8 +158,14 @@ scripts/billguard/
     ledger.py                 the supplier ledger (SQLite, stdlib)
     checks.py                 the check register
     verdict.py                three outcomes, never a score
+    intake.py                 PDF, photo, email and pasted text to a Document
+    lookups.py                free register clients, dated cache, fail-safe
+    scheduled.py              folder-watch runner, writes a digest
+    agent_tool.py             one JSON in, one verdict out, for agents
+    packs.py                  declarative trade rules
     cli.py                    subcommand dispatch
 scripts/tests/                offline, no network, run with tests/run.py
+packs/                        construction pack ships; add your own
 examples/                     worked documents
 ```
 
