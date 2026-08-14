@@ -1,159 +1,100 @@
 # Bill Guard
 
-Check an invoice before you pay it.
+Bill Guard is a read-only, Australian-focused invoice checker. It normalises a
+bill, runs evidence-backed checks, and returns one of `SAFE TO PAY`, `QUERY`,
+`HOLD`, or `NOTHING TO PAY`. The deterministic core uses only the Python 3
+standard library and represents checks it cannot complete as `unknown`, never
+as a silent pass.
 
-You point it at a bill. It tells you **safe to pay**, **query**, or **hold**,
-and says why in plain words.
+## Run it from the repository
 
-It runs on your own computer. No account, no subscription, no API key, and
-nothing about your invoices is sent anywhere.
-
----
-
-## The one thing it is for
-
-Somebody emails you an invoice that looks exactly right. Same supplier, same
-logo, same amount. One thing changed: the bank account.
-
-That is how businesses actually lose money, and it is the thing Bill Guard
-watches. It remembers which account you have really paid each supplier at,
-and holds anything that names a different one.
-
-Everything else it does is supporting evidence.
-
----
-
-## Setup
-
-Nothing to install. You need Python, which every Mac already has.
+There is no install step. Use Python 3. The entry point resolves its package
+relative to itself, so these commands run from a clean checkout. The final
+command either decodes the fixture or reports that its optional decoder is
+unavailable:
 
 ```bash
+python3 scripts/billguard.py --help
 python3 scripts/billguard.py capabilities
+python3 scripts/billguard.py check examples/invoice-clean.json --json
+python3 scripts/billguard.py read examples/invoice-clean.json --json
+python3 scripts/billguard.py scan-codes examples/intake/two-payment-codes.png --json
 ```
 
-If that printed something, you are done.
+`check` exits 0 for safe/settled, 1 for query, 2 for hold, and 3 when the
+document cannot be read. A nonzero assessment exit is a verdict, not a crash.
+Run `python3 scripts/billguard.py selftest` to execute the offline test suite.
 
-To type `billguard` instead of the long path, add this line to your
-`~/.zshrc`, then open a new terminal:
+Other CLI surfaces are discoverable through `--help`: `paid` records a payment
+you say has already happened, `ledger` inspects or updates local history, and
+`scheduled-run` assesses an inbox and writes a JSON digest. None of them can
+initiate or approve a payment.
 
-```bash
-alias billguard="python3 $HOME/Projects/bill-guard/scripts/billguard.py"
-```
+## Capability list
 
-Pick a place to keep its memory. Any path will do; it makes the file itself.
+Always run `capabilities` on the machine doing the work; it reports registered
+checks and the barcode decoders actually available there.
 
-```bash
-export BILLGUARD_LEDGER=~/billguard.db
-```
+Available without third-party Python packages:
 
----
+- prepared, versioned JSON document intake;
+- plain-text and pasted-text normalisation with per-field confidence;
+- checks spanning identity, relationship, payment, duplicates, document
+  integrity, channel, scam, sanctions, legal/tax document rules, and deadlines;
+- integer-cent arithmetic, pass/fail/unknown evidence, local SQLite history,
+  declarative rule packs, scheduled-folder processing, and JSON output;
+- equivalent library, agent-tool, CLI, and scheduled-runner verdict contracts;
+- free ABR, BSB-directory, and sanctions lookup adapters with timeouts, dated
+  local caching, source attribution, and explicit `unknown` fallback.
 
-## Using it
+Optional local capabilities:
 
-**Check a bill.** Works on a PDF, a photo, a saved email, a text file, or
-text you paste.
+- PDF text extraction requires the free `pdftotext` executable;
+- scanning every page of a PDF for codes requires the free `pdftoppm`
+  executable plus a supported barcode decoder;
+- image/code decoding requires OpenCV (`cv2`) or `zbarimg`;
+- scanned-document text recognition is not bundled. If a PDF has no text layer,
+  Bill Guard reports the capability gap instead of treating it as blank.
 
-```bash
-billguard check invoice.pdf --ledger ~/billguard.db --remember
-```
-
-**Tell it when you actually pay something.** Just point at the same file.
-This is what makes the bank-account check work, so it is worth doing every
-time.
-
-```bash
-billguard paid invoice.pdf --ledger ~/billguard.db
-```
-
-**See what it read off a document**, when you want to check its working:
-
-```bash
-billguard read invoice.pdf
-```
-
-**Paste text instead of a file:**
-
-```bash
-pbpaste | billguard check -
-```
-
-**Scan a barcode on a page**, and find out where the money would really go:
-
-```bash
-billguard scan-codes invoice.png
-```
-
----
-
-## What the answers mean
-
-**SAFE TO PAY** — nothing material changed, and every check that could run
-passed.
-
-**QUERY** — something needs a person to look before paying. It says what.
-
-**HOLD** — do not pay yet. It names the reason in one sentence and tells you
-what to do about it.
-
-**NOTHING TO PAY** — this is a receipt for something already paid, not a
-bill. File it.
-
-It also prints a **worth knowing** section for paperwork problems, like an
-invoice that will not support a GST claim. Those never stop you paying.
-
-For automation, the exit code is the answer: `0` safe or nothing to pay,
-`1` query, `2` hold, `3` could not read it.
-
----
-
-## The first week
-
-The first time it sees a supplier it will say so, because it has no history
-to compare against. That is not a warning about them, it is the tool being
-honest that it cannot help yet.
-
-It gets useful as you use it. Check bills as they arrive, and run `paid`
-when you pay one. After a few invoices from a supplier it knows what normal
-looks like for them, and a changed bank account stands out immediately.
-
----
+The registry clients are not used unless a caller supplies/configures them.
+When used, they make read-only requests to the relevant free lookup source and
+store dated responses in the chosen local cache. Invoice and ledger data is not
+sent to any paid or hosted Bill Guard service; there is no such service.
 
 ## What it cannot do
 
-**It cannot tell you whether a bank account really belongs to that business.**
-That needs a bank's own systems. Every verdict says so.
+- It cannot prove that a bank account belongs to the named supplier. Treat the
+  bank's own account-name confirmation and an independently verified contact as
+  separate controls.
+- It cannot pay, approve/reject, move, rename, or delete an invoice, log into a
+  bank, navigate authenticated links, write to accounting software, or contact
+  a supplier.
+- It does not provide authoritative legal, tax, sanctions, registry, or fraud
+  advice. Findings are decision support with visible source and date evidence.
+- It does not guarantee a document is genuine or safe merely because the
+  verdict is `SAFE TO PAY`; that means no material issue was found by the checks
+  that had enough evidence to run.
+- It is focused on Australian invoices, ABNs, GST, BSBs, and configured
+  Australian deadline rules. It is not a rules engine for other jurisdictions.
+- It cannot promise complete PDF, image, QR, or live-registry coverage when the
+  corresponding optional local tool or free source is missing or unavailable.
 
-When you go to pay, your banking app runs its own account-name check and
-tells you whether the name matches the account. That is the control that
-actually catches a redirected payment. Read what it says.
+## Data and safety
 
-**It cannot pay, approve, or send anything.** There is no code in here that
-can move money or email anyone. That is deliberate: an invoice is a document
-a stranger sent you, and a tool that reads strangers' documents should not
-also be able to act on your accounts.
+The ledger and lookup cache are local SQLite files at paths selected by the
+caller. The scheduled runner writes only its configured ledger and digest. The
+core has no payment or supplier-contact capability. Treat invoice files as
+untrusted input and inspect `unknown`, `QUERY`, and `HOLD` evidence before acting.
 
-**It cannot read a scan or a photo of paper** unless you install text
-recognition separately. It will say so rather than pretending the page was
-blank.
+## Importable API
 
-**It is written for Australian invoices.** ABNs, GST, BSBs. It will still
-check bank-account changes, duplicates and arithmetic anywhere, and it
-knows not to demand an ABN from an overseas supplier.
+Add the repository's `scripts` directory to `PYTHONPATH` (or insert it in the
+embedding application), then import `billguard`. The public entry points are
+`billguard.assess(document, ledger=None, ctx=None)` for a `Document` and
+`billguard.check_json(value, ledger=None, ctx=None)` for the versioned JSON
+contract. `check_json` returns a JSON-serialisable object containing the same
+verdict and exit semantics as the CLI and never performs an action on the bill.
 
----
-
-## Where your data lives
-
-One file, wherever you put it, on your machine. Nothing is uploaded. Bill
-Guard makes no network connection at all unless you deliberately turn on
-business-register lookups.
-
----
-
-## Checking it works
-
-```bash
-billguard selftest
-```
-
-Runs the full test suite offline. Everything should pass.
+Rule packs live in `packs/`; `packs/construction.json` demonstrates validated
+progress-claim and retention rules. See `SKILL.md` for the portable skill
+contract and agent-facing safety guidance.

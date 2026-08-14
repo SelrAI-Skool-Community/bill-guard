@@ -64,7 +64,7 @@ with everything green. One task should be one commit.
       no write outside its own ledger and output file.
 
 ## Independent
-- [ ] T8a: README with the honest capability list, including what it cannot do —
+- [x] T8a: README with the honest capability list, including what it cannot do —
       done when: every command shown is exercised by a test.
 - [ ] T8b: Packaging smoke test from a clean directory — done when: importing
       `billguard` and running the CLI both work with no install step.
