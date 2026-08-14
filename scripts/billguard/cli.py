@@ -673,6 +673,13 @@ def build_parser() -> argparse.ArgumentParser:
                    help="record this document in the ledger")
     c.set_defaults(func=cmd_check)
 
+    sr = sub.add_parser("scheduled-run", help="assess an inbox and write a digest")
+    sr.add_argument("input_dir", help="folder containing bills to assess")
+    sr.add_argument("--ledger", required=True,
+                    help="Bill Guard ledger written by this run")
+    sr.add_argument("--output", required=True, help="JSON digest to write")
+    sr.set_defaults(func=cmd_scheduled_run)
+
     s = sub.add_parser("scan-codes", help="decode every code on an image")
     s.add_argument("image")
     s.add_argument("--jurisdiction", default="AU")
@@ -711,6 +718,18 @@ def build_parser() -> argparse.ArgumentParser:
     cp.set_defaults(func=cmd_capabilities)
 
     return p
+
+
+def cmd_scheduled_run(args) -> int:
+    from .scheduled import run_folder
+    try:
+        digest = run_folder(args.input_dir, ledger_path=args.ledger,
+                            output_path=args.output)
+    except (OSError, ValueError) as exc:
+        print(f"Scheduled run failed: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    print(json.dumps(digest["summary"], sort_keys=True))
+    return EXIT_ERROR if digest["summary"]["errors"] else EXIT_SAFE
 
 
 def main(argv=None) -> int:

@@ -59,7 +59,7 @@ with everything green. One task should be one commit.
 - [x] T7b: Agent-tool adapter: a single function taking JSON and returning the
       verdict JSON — done when: the same fixture through library, CLI and adapter
       produces identical verdicts and identical exit semantics.
-- [ ] T7c: Scheduled-runner adapter: process a folder, write a digest, never act —
+- [x] T7c: Scheduled-runner adapter: process a folder, write a digest, never act —
       done when: a run over a fixture folder produces a digest and provably makes
       no write outside its own ledger and output file.
 
