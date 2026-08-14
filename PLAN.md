@@ -56,7 +56,7 @@ with everything green. One task should be one commit.
 
 - [x] T7a: Freeze the JSON document contract and version it — done when: a
       contract test asserts the shape and an unknown field is ignored, not fatal.
-- [ ] T7b: Agent-tool adapter: a single function taking JSON and returning the
+- [x] T7b: Agent-tool adapter: a single function taking JSON and returning the
       verdict JSON — done when: the same fixture through library, CLI and adapter
       produces identical verdicts and identical exit semantics.
 - [ ] T7c: Scheduled-runner adapter: process a folder, write a digest, never act —

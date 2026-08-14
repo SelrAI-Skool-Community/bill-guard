@@ -28,6 +28,7 @@ __all__ = [
     "HOLD", "QUERY", "SAFE", "SETTLED", "assess",
     "AbrClient", "BsbClient", "LookupClient", "LookupResult", "SanctionsClient",
     "Pack", "PackRule", "PackValidationError", "load_pack",
+    "check_json",
 ]
 
 
@@ -39,3 +40,9 @@ def assess(doc, ledger=None, ctx=None):
     from . import checks
     results = checks.run_all(doc, ledger, ctx or {})
     return decide(results, doc)
+
+
+def check_json(document_json, *, ledger=None, ctx=None):
+    """Run the agent-tool JSON adapter without adding import-time coupling."""
+    from .agent_tool import check_json as _check_json
+    return _check_json(document_json, ledger=ledger, ctx=ctx)
