@@ -53,3 +53,4 @@ One block per resolved decision. A line beginning NEEDS_HUMAN flags a gate await
 - CROSS_REVIEW: iter 3 — author=codex reviewer=claude verdict=accept confidence=high — risk: a HOLD/QUERY document — exit-code parity for non-SAFE outcomes is structurally guaranteed but never exercised by the test — note: clean
 - CROSS_REVIEW: iter 4 — author=codex reviewer=claude verdict=accept confidence=high — risk: an inbox containing a subdirectory or the ledger/digest placed inside the inbox — handled by is_file() + excluded-set, but not directly tested — note: clean
 - CROSS_REVIEW: iter 5 — author=codex reviewer=claude verdict=accept confidence=high — risk: check on invoice-clean.json returning 0 instead of 1 if the fixture's missing-history query state changes — note: clean
+- CROSS_REVIEW: iter 6 — author=codex reviewer=claude verdict=accept confidence=high — risk: Python <3.9 runtime — is_relative_to() would error the test itself — note: clean
