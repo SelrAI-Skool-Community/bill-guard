@@ -3,6 +3,7 @@
 Stdlib only. Money is integer cents everywhere; floats drift and a drifted
 total is a wrong verdict.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

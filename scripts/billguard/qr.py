@@ -19,6 +19,7 @@ Decoder cascade, best-effort, all optional:
 Every decoder is optional. Missing decoders degrade to a reported UNKNOWN,
 never to a silent pass.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

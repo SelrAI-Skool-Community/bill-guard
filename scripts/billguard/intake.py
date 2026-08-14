@@ -20,6 +20,7 @@ Three rules govern extraction:
   * Say what could not be done. A scanned PDF with no text layer is a named
     capability gap, never an empty successful read.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

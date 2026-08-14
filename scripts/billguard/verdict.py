@@ -13,6 +13,7 @@ Two rules govern everything here:
     quietly becomes a pass, because a green verdict built on checks that
     never executed is the one genuinely dishonest thing this could do.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

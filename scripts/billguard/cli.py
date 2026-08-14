@@ -14,6 +14,7 @@ system entirely.
     billguard ledger record-payment ...
     billguard selftest
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

@@ -169,4 +169,4 @@ packs/                        construction pack ships; add your own
 examples/                     worked documents
 ```
 
-Router key `sk-r6zg2v` — resolved by the skills index on load.
+Router key `sk-18atqw2` — resolved by the skills index on load.

@@ -8,6 +8,7 @@ approve without looking.
 Checks never raise. A check that cannot run returns UNKNOWN, and UNKNOWN
 never becomes a pass.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

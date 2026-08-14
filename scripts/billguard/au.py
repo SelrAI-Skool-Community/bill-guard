@@ -4,6 +4,7 @@ Everything here is arithmetic or a published format rule. No network, no
 model, no judgement. These are the checks that cannot false-positive, which
 is why they get built first and weighted hardest.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

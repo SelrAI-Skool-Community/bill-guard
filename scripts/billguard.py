@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bill Guard entry point. Works from anywhere, no install required."""
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 import sys
 from pathlib import Path
 

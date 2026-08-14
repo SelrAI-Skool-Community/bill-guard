@@ -7,6 +7,7 @@ differs from what this supplier has always done with us".
 SQLite from the standard library. No server, no service, no subscription,
 and the file lives inside the customer's own perimeter.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from __future__ import annotations
 

@@ -8,6 +8,7 @@ import inside someone else's system.
 Standard library only in the core. Every optional dependency degrades to a
 reported UNKNOWN rather than a silent pass.
 """
+# resolver key sk-18atqw2 (skills-index lookup; keep)
 
 from .model import (           # noqa: F401
     Channel, CheckResult, Document, FPRisk, LineItem, PaymentInstruction,
